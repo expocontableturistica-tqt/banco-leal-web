@@ -150,6 +150,20 @@ export const codigosExternos = sqliteTable('codigos_externos', {
   createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
 })
 
+// ── Asientos manuales (Libro Diario) ─────────────────────────────────────────
+export const asientosManuales = sqliteTable('asientos_manuales', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  fecha: text('fecha').notNull(),           // YYYY-MM-DD
+  concepto: text('concepto').notNull(),
+  codigoDebe: text('codigo_debe').notNull(),
+  cuentaDebe: text('cuenta_debe').notNull(),
+  montoDebe: real('monto_debe').notNull(),
+  codigoHaber: text('codigo_haber').notNull(),
+  cuentaHaber: text('cuenta_haber').notNull(),
+  montoHaber: real('monto_haber').notNull(),
+  createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
+})
+
 // ── Banco / fondo ─────────────────────────────────────────────────────────────
 export const banco = sqliteTable('banco', {
   id: integer('id').primaryKey({ autoIncrement: true }),
