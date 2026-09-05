@@ -5,7 +5,7 @@ import { eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { users } from '@/lib/schema'
 
-export type UserRole = 'admin' | 'cajero' | 'empresa' | 'socio'
+export type UserRole = 'admin' | 'cajero' | 'operador' | 'empresa' | 'socio'
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   session: { strategy: 'jwt' },
@@ -26,7 +26,14 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         if (!user || !user.activo) return null
         const ok = await compare(String(credentials.password), user.passwordHash)
         if (!ok) return null
-        return { id: user.id, email: user.email, name: user.name, role: user.role, entityId: user.entityId }
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+          entityId: user.entityId,
+          numeroCaja: user.numeroCaja,
+        }
       },
     }),
   ],
@@ -35,12 +42,14 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       if (user) {
         token.role = (user as { role: UserRole }).role
         token.entityId = (user as { entityId: number | null }).entityId
+        token.numeroCaja = (user as { numeroCaja: number | null }).numeroCaja
       }
       return token
     },
     session({ session, token }) {
       session.user.role = token.role as UserRole
       session.user.entityId = token.entityId as number | null
+      session.user.numeroCaja = token.numeroCaja as number | null
       return session
     },
   },
@@ -48,6 +57,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
 declare module 'next-auth' {
   interface Session {
-    user: DefaultSession['user'] & { role: UserRole; entityId: number | null }
+    user: DefaultSession['user'] & {
+      role: UserRole
+      entityId: number | null
+      numeroCaja: number | null
+    }
   }
 }

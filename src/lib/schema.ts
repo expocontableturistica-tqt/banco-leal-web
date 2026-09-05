@@ -7,8 +7,9 @@ export const users = sqliteTable('users', {
   email: text('email').unique().notNull(),
   passwordHash: text('password_hash').notNull(),
   name: text('name').notNull(),
-  role: text('role', { enum: ['admin', 'cajero', 'empresa', 'socio'] }).notNull(),
+  role: text('role', { enum: ['admin', 'cajero', 'operador', 'empresa', 'socio'] }).notNull(),
   entityId: integer('entity_id'), // → socios.id o empresas.id
+  numeroCaja: integer('numero_caja'),  // solo cajeros: número de ventanilla asignado
   activo: integer('activo', { mode: 'boolean' }).default(true),
   createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
 })
@@ -106,8 +107,12 @@ export const reservasDivisas = sqliteTable('reservas_divisas', {
 })
 
 // ── Caja ─────────────────────────────────────────────────────────────────────
+// userId = null → bóveda del banco (administrada por admin)
+// userId = user.id → ventanilla del cajero
 export const caja = sqliteTable('caja', {
   id: integer('id').primaryKey({ autoIncrement: true }),
+  userId: text('user_id'),             // null = bóveda; text = cajero.id
+  numeroCaja: integer('numero_caja'),  // número de ventanilla (null para bóveda)
   saldoEfectivo: real('saldo_efectivo').default(0).notNull(),
   estado: text('estado', { enum: ['abierta', 'cerrada'] }).default('cerrada').notNull(),
   fechaApertura: text('fecha_apertura'),
@@ -117,7 +122,8 @@ export const caja = sqliteTable('caja', {
 // ── Movimientos de caja ──────────────────────────────────────────────────────
 export const movimientosCaja = sqliteTable('movimientos_caja', {
   id: integer('id').primaryKey({ autoIncrement: true }),
-  tipo: text('tipo', { enum: ['apertura', 'cierre', 'ingreso', 'egreso'] }).notNull(),
+  cajaId: integer('caja_id'),  // FK a caja.id
+  tipo: text('tipo', { enum: ['apertura', 'cierre', 'ingreso', 'egreso', 'transferencia_entrada', 'transferencia_salida'] }).notNull(),
   monto: real('monto').notNull(),
   concepto: text('concepto').default(''),
   saldoPosterior: real('saldo_posterior').notNull(),

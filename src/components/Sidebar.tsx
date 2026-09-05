@@ -3,26 +3,31 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut } from 'next-auth/react'
 
-import type { UserRole } from '@/auth'
-type Role = Extract<UserRole, 'admin' | 'cajero'>
+type Role = 'admin' | 'cajero' | 'operador'
 
 const NAV: { href: string; label: string; icon: string; roles: Role[] }[] = [
-  { href: '/dashboard',     label: 'Dashboard',       icon: '📊', roles: ['admin', 'cajero'] },
-  { href: '/socios',        label: 'Socios',           icon: '👥', roles: ['admin', 'cajero'] },
-  { href: '/empresas',      label: 'Empresas',         icon: '🏢', roles: ['admin', 'cajero'] },
-  { href: '/cajero',        label: 'Cajero',           icon: '💵', roles: ['admin', 'cajero'] },
-  { href: '/cuentas',       label: 'Cuentas',          icon: '🏦', roles: ['admin', 'cajero'] },
-  { href: '/caja',          label: 'Caja',             icon: '🗄️', roles: ['admin', 'cajero'] },
-  { href: '/historial',     label: 'Historial',        icon: '📋', roles: ['admin', 'cajero'] },
-  { href: '/cambio',        label: 'Mesa de Cambio',   icon: '💱', roles: ['admin', 'cajero'] },
-  { href: '/prestaciones',  label: 'Prestaciones',     icon: '⭐', roles: ['admin', 'cajero'] },
-  { href: '/servicios',     label: 'Servicios',        icon: '⚙️', roles: ['admin', 'cajero'] },
-  { href: '/cierre',        label: 'Cierre del Día',   icon: '🔒', roles: ['admin'] },
-  { href: '/libros',        label: 'Libros Contables', icon: '📖', roles: ['admin'] },
-  { href: '/configuracion', label: 'Configuración',    icon: '🔧', roles: ['admin'] },
+  { href: '/dashboard',     label: 'Dashboard',        icon: '📊', roles: ['admin', 'cajero'] },
+  { href: '/socios',        label: 'Socios',            icon: '👥', roles: ['admin', 'cajero'] },
+  { href: '/empresas',      label: 'Empresas',          icon: '🏢', roles: ['admin', 'cajero'] },
+  { href: '/cajero',        label: 'Cajero',            icon: '💵', roles: ['admin', 'cajero'] },
+  { href: '/cuentas',       label: 'Cuentas',           icon: '🏦', roles: ['admin', 'cajero'] },
+  { href: '/caja',          label: 'Caja',              icon: '🗄️', roles: ['admin', 'cajero'] },
+  { href: '/historial',     label: 'Historial',         icon: '📋', roles: ['admin', 'cajero', 'operador'] },
+  { href: '/cambio',        label: 'Mesa de Cambio',    icon: '💱', roles: ['admin', 'cajero'] },
+  { href: '/prestaciones',  label: 'Prestaciones',      icon: '⭐', roles: ['admin', 'operador'] },
+  { href: '/servicios',     label: 'Servicios',         icon: '⚙️', roles: ['admin', 'cajero'] },
+  { href: '/cierre',        label: 'Cierre del Día',    icon: '🔒', roles: ['admin'] },
+  { href: '/libros',        label: 'Libros Contables',  icon: '📖', roles: ['admin'] },
+  { href: '/configuracion', label: 'Configuración',     icon: '🔧', roles: ['admin'] },
 ]
 
-export default function Sidebar({ role, userName }: { role: Role; userName: string }) {
+const ROLE_LABEL: Record<Role, string> = {
+  admin:    'Administrador',
+  cajero:   'Cajero',
+  operador: 'Operador',
+}
+
+export default function Sidebar({ role, userName, numeroCaja }: { role: Role; userName: string; numeroCaja?: number | null }) {
   const path = usePathname()
   const items = NAV.filter(n => n.roles.includes(role))
 
@@ -34,7 +39,10 @@ export default function Sidebar({ role, userName }: { role: Role; userName: stri
           <span className="text-xl">🏦</span>
           <div>
             <p className="text-sm font-bold text-gray-900 leading-tight">Banco Ficticio</p>
-            <p className="text-xs text-gray-400 capitalize">{role}</p>
+            <p className="text-xs text-gray-400">
+              {ROLE_LABEL[role]}
+              {role === 'cajero' && numeroCaja ? ` · Ventanilla ${numeroCaja}` : ''}
+            </p>
           </div>
         </div>
       </div>
@@ -62,7 +70,8 @@ export default function Sidebar({ role, userName }: { role: Role; userName: stri
 
       {/* Footer */}
       <div className="px-4 py-3 border-t border-gray-100">
-        <p className="text-xs text-gray-500 truncate mb-2">{userName}</p>
+        <p className="text-xs font-medium text-gray-700 truncate">{userName}</p>
+        <p className="text-xs text-gray-400 truncate mb-2">{ROLE_LABEL[role]}</p>
         <button
           onClick={() => signOut({ callbackUrl: '/login' })}
           className="text-xs text-red-500 hover:text-red-700 transition-colors"
