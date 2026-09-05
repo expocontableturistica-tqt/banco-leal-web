@@ -28,7 +28,7 @@ export default function LoginPage() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 w-full max-w-sm">
         <div className="text-center mb-6">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.svg" alt="Banco Leal S.A." className="w-28 h-28 mx-auto mb-3" />
+          <img src="/logo.png" alt="Banco Leal S.A." className="w-32 h-32 mx-auto mb-3" />
           <h1 className="text-xl font-bold text-gray-900">Banco Leal S.A.</h1>
           <p className="text-sm text-gray-500 mt-1">Sistema bancario educativo</p>
         </div>

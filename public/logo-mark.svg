@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 70">
-  <!-- Shield -->
-  <path d="M30 2 L56 12 L56 38 Q56 58 30 68 Q4 58 4 38 L4 12 Z" fill="#6B7280"/>
-  <path d="M30 6 L52 15 L52 37 Q52 55 30 64 Q8 55 8 37 L8 15 Z" fill="#9CA3AF"/>
-  <path d="M30 6 L52 15 L52 22 L8 22 L8 15 Z" fill="#D1D5DB" opacity="0.35"/>
-  <!-- BL text -->
-  <text x="13" y="46" font-family="Georgia, serif" font-size="24" font-weight="bold"
-        fill="white" opacity="0.95" letter-spacing="-1">BL</text>
-</svg>
