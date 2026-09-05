@@ -5,7 +5,7 @@ import './globals.css'
 const geist = Geist({ subsets: ['latin'], variable: '--font-geist' })
 
 export const metadata: Metadata = {
-  title: 'Banco Ficticio',
+  title: 'Banco Leal S.A.',
   description: 'Sistema bancario educativo',
 }
 

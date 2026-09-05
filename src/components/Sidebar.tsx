@@ -36,9 +36,10 @@ export default function Sidebar({ role, userName, numeroCaja }: { role: Role; us
       {/* Header */}
       <div className="px-4 py-4 border-b border-gray-100">
         <div className="flex items-center gap-2">
-          <span className="text-xl">🏦</span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo-mark.svg" alt="BL" className="w-8 h-9 flex-shrink-0" />
           <div>
-            <p className="text-sm font-bold text-gray-900 leading-tight">Banco Ficticio</p>
+            <p className="text-sm font-bold text-gray-900 leading-tight">Banco Leal S.A.</p>
             <p className="text-xs text-gray-400">
               {ROLE_LABEL[role]}
               {role === 'cajero' && numeroCaja ? ` · Ventanilla ${numeroCaja}` : ''}

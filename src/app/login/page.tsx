@@ -27,8 +27,9 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 w-full max-w-sm">
         <div className="text-center mb-6">
-          <div className="text-3xl mb-2">🏦</div>
-          <h1 className="text-xl font-bold text-gray-900">Banco Ficticio</h1>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.svg" alt="Banco Leal S.A." className="w-28 h-28 mx-auto mb-3" />
+          <h1 className="text-xl font-bold text-gray-900">Banco Leal S.A.</h1>
           <p className="text-sm text-gray-500 mt-1">Sistema bancario educativo</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">

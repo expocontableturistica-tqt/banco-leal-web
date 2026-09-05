@@ -12,8 +12,9 @@ export default async function PortalLayout({ children }: { children: React.React
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-xl">🏦</span>
-          <span className="font-bold text-gray-900">Banco Ficticio</span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo-mark.svg" alt="BL" className="w-6 h-7" />
+          <span className="font-bold text-gray-900">Banco Leal S.A.</span>
           <span className="text-xs bg-gray-100 text-gray-500 rounded px-2 py-0.5 ml-2 capitalize">
             {session.user.role}
           </span>
