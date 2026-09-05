@@ -9,6 +9,8 @@ export async function GET(req: Request) {
   const email = searchParams.get('email') ?? 'admin@bancoleal.com'
 
   const dbUrl = process.env.TURSO_DATABASE_URL ?? 'NOT_SET'
+  const tokenLen = (process.env.TURSO_AUTH_TOKEN ?? '').length
+  const tokenEnd = (process.env.TURSO_AUTH_TOKEN ?? '').slice(-10)
 
   try {
     const [user] = await db.select({
@@ -32,6 +34,6 @@ export async function GET(req: Request) {
       passwordOk: ok,
     })
   } catch (e: unknown) {
-    return NextResponse.json({ error: String(e), dbUrl }, { status: 500 })
+    return NextResponse.json({ error: String(e), dbUrl, tokenLen, tokenEnd }, { status: 500 })
   }
 }
