@@ -34,6 +34,15 @@ export async function GET(req: Request) {
       passwordOk: ok,
     })
   } catch (e: unknown) {
-    return NextResponse.json({ error: String(e), dbUrl, tokenLen, tokenEnd }, { status: 500 })
+    const err = e as { message?: string; cause?: unknown; code?: string }
+    return NextResponse.json({
+      error: err.message ?? String(e),
+      cause: String(err.cause ?? ''),
+      code: err.code ?? '',
+      dbUrl,
+      dbUrlUsed: dbUrl.replace('libsql://', 'https://'),
+      tokenLen,
+      tokenEnd,
+    }, { status: 500 })
   }
 }
