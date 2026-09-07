@@ -23,7 +23,7 @@ export default auth((req) => {
   }
 
   // Rutas públicas
-  if (path === '/login' || path.startsWith('/_next') || path.startsWith('/api/auth') || path.startsWith('/api/debug-auth')) {
+  if (path === '/login' || path.startsWith('/_next') || path.startsWith('/api/auth')) {
     return NextResponse.next()
   }
 
