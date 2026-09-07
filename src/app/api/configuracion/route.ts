@@ -32,7 +32,7 @@ export async function GET(req: Request) {
     entityId: users.entityId,
     activo: users.activo,
     createdAt: users.createdAt,
-  }).from(users).where(inArray(users.role, roles as string[]))
+  }).from(users).where(inArray(users.role, roles as ('admin' | 'cajero' | 'operador' | 'empresa' | 'socio')[]))
 
   // Para externos, enriquecer con la entidad vinculada
   if (tipo === 'externos') {

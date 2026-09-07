@@ -12,10 +12,10 @@ export async function GET() {
   const entityId = session.user?.entityId as number | undefined
   const role = session.user?.role
 
-  let cuenta = null
-  let prestamo = null
-  let movimientos = []
-  let entidad = null
+  let cuenta: typeof cuentas.$inferSelect | null = null
+  let prestamo: typeof prestamos.$inferSelect | null = null
+  let movimientos: (typeof movimientosCuenta.$inferSelect)[] = []
+  let entidad: typeof empresas.$inferSelect | typeof socios.$inferSelect | null = null
 
   if (role === 'empresa' && entityId) {
     const [emp] = await db.select().from(empresas).where(eq(empresas.id, entityId)).limit(1)
