@@ -14,6 +14,9 @@ export async function GET() {
       id: prestamos.id,
       monto: prestamos.monto,
       saldoPendiente: prestamos.saldoPendiente,
+      cuotas: prestamos.cuotas,
+      cuotasPagadas: prestamos.cuotasPagadas,
+      montoCuota: prestamos.montoCuota,
       concepto: prestamos.concepto,
       estado: prestamos.estado,
       createdAt: prestamos.createdAt,
@@ -39,44 +42,45 @@ export async function POST(req: Request) {
   const { action } = body
 
   if (action === 'otorgar') {
-    const { empresaId, monto, concepto } = body
+    const { empresaId, monto, concepto, cuotas } = body
     if (!empresaId || !monto || monto <= 0)
       return NextResponse.json({ error: 'Datos inválidos' }, { status: 400 })
 
-    // Buscar cuenta de la empresa
+    const cuotasNum = Math.max(1, parseInt(cuotas) || 1)
+    const montoCuotaCalc = Math.round((monto / cuotasNum) * 100) / 100
+
     const [cuentaEmpresa] = await db.select().from(cuentas)
       .where(and(eq(cuentas.empresaId, empresaId), eq(cuentas.estado, 'activa')))
       .limit(1)
     if (!cuentaEmpresa)
       return NextResponse.json({ error: 'La empresa no tiene cuenta activa' }, { status: 400 })
 
-    // Verificar bóveda
     const [boveda] = await db.select().from(caja).where(isNull(caja.userId)).limit(1)
     if (!boveda || boveda.saldoEfectivo < monto)
       return NextResponse.json({ error: 'Saldo insuficiente en bóveda' }, { status: 400 })
 
-    // Crear préstamo
     const [prestamo] = await db.insert(prestamos).values({
       empresaId,
       cuentaId: cuentaEmpresa.id,
       monto,
       saldoPendiente: monto,
+      cuotas: cuotasNum,
+      cuotasPagadas: 0,
+      montoCuota: montoCuotaCalc,
       concepto: concepto || 'Préstamo inicial',
       estado: 'vigente',
     }).returning()
 
-    // Acreditar en cuenta empresa
     const nuevoSaldo = cuentaEmpresa.saldo + monto
     await db.update(cuentas).set({ saldo: nuevoSaldo }).where(eq(cuentas.id, cuentaEmpresa.id))
     await db.insert(movimientosCuenta).values({
       cuentaId: cuentaEmpresa.id,
       tipo: 'credito',
       monto,
-      concepto: `Préstamo otorgado: ${concepto || 'Préstamo inicial'}`,
+      concepto: `Préstamo otorgado: ${concepto || 'Préstamo inicial'} (${cuotasNum} cuota${cuotasNum > 1 ? 's' : ''})`,
       saldoPosterior: nuevoSaldo,
     })
 
-    // Debitar de bóveda
     const nuevoSaldoBoveda = boveda.saldoEfectivo - monto
     await db.update(caja).set({ saldoEfectivo: nuevoSaldoBoveda }).where(eq(caja.id, boveda.id))
     await db.insert(movimientosCaja).values({
@@ -115,14 +119,19 @@ export async function POST(req: Request) {
       saldoPosterior: nuevoSaldo,
     })
 
-    const nuevoSaldoPendiente = prestamo.saldoPendiente - pagoReal
+    const nuevoSaldoPendiente = Math.max(0, prestamo.saldoPendiente - pagoReal)
     const nuevoEstado = nuevoSaldoPendiente <= 0.001 ? 'pagado' : 'vigente'
+    const montoCuota = prestamo.montoCuota ?? (prestamo.monto / prestamo.cuotas)
+    const nuevasCuotasPagadas = nuevoEstado === 'pagado'
+      ? prestamo.cuotas
+      : Math.min(prestamo.cuotas, Math.floor((prestamo.monto - nuevoSaldoPendiente) / montoCuota + 0.01))
+
     await db.update(prestamos).set({
-      saldoPendiente: Math.max(0, nuevoSaldoPendiente),
+      saldoPendiente: nuevoSaldoPendiente,
       estado: nuevoEstado,
+      cuotasPagadas: nuevasCuotasPagadas,
     }).where(eq(prestamos.id, prestamoId))
 
-    // Acreditar en bóveda
     const [boveda] = await db.select().from(caja).where(isNull(caja.userId)).limit(1)
     if (boveda) {
       const nuevoSaldoBoveda = boveda.saldoEfectivo + pagoReal
@@ -136,7 +145,7 @@ export async function POST(req: Request) {
       })
     }
 
-    return NextResponse.json({ ok: true, nuevoSaldoPendiente: Math.max(0, nuevoSaldoPendiente), estado: nuevoEstado })
+    return NextResponse.json({ ok: true, nuevoSaldoPendiente, estado: nuevoEstado, cuotasPagadas: nuevasCuotasPagadas })
   }
 
   return NextResponse.json({ error: 'Acción no reconocida' }, { status: 400 })

@@ -29,6 +29,13 @@
       "when": 1788752708032,
       "tag": "0003_opposite_morlun",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1788822725089,
+      "tag": "0004_yielding_power_man",
+      "breakpoints": true
     }
   ]
 }
