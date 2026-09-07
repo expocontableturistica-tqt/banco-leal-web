@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSession } from 'next-auth/react'
 
 interface Socio {
@@ -24,6 +24,8 @@ export default function SociosPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [buscar, setBuscar] = useState('')
+  const [importMsg, setImportMsg] = useState('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const isAdmin = session?.user?.role === 'admin'
   const canEdit = isAdmin || session?.user?.role === 'cajero'
@@ -63,6 +65,20 @@ export default function SociosPage() {
     setSaving(false)
   }
 
+  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const fd = new FormData()
+    fd.append('tipo', 'socios')
+    fd.append('file', file)
+    const res = await fetch('/api/import', { method: 'POST', body: fd })
+    const data = await res.json()
+    if (res.ok) setImportMsg(`Importación: ${data.creados} socios creados, ${data.omitidos} omitidos`)
+    else setImportMsg('Error: ' + data.error)
+    e.target.value = ''
+    fetchSocios()
+  }
+
   async function handleDelete(id: number, nombre: string) {
     if (!confirm(`¿Eliminar a ${nombre}? Esta acción no se puede deshacer.`)) return
     await fetch('/api/socios', {
@@ -92,14 +108,29 @@ export default function SociosPage() {
           <p className="text-sm text-gray-500">{socios.length} socios registrados</p>
         </div>
         {canEdit && (
-          <button
-            onClick={() => { setShowModal(true); setError('') }}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-          >
-            + Nuevo socio
-          </button>
+          <div className="flex gap-2">
+            <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls,.txt" className="hidden" onChange={handleImport} />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+            >
+              Importar CSV
+            </button>
+            <button
+              onClick={() => { setShowModal(true); setError('') }}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+            >
+              + Nuevo socio
+            </button>
+          </div>
         )}
       </div>
+
+      {importMsg && (
+        <div className="mb-4 bg-blue-50 border border-blue-200 text-blue-800 rounded-lg px-4 py-2 text-sm flex justify-between">
+          {importMsg} <button onClick={() => setImportMsg('')} className="text-blue-400 hover:text-blue-600">✕</button>
+        </div>
+      )}
 
       {/* Buscador */}
       <div className="mb-4">

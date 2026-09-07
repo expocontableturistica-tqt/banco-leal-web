@@ -16,6 +16,7 @@ const NAV: { href: string; label: string; icon: string; roles: Role[] }[] = [
   { href: '/cambio',        label: 'Mesa de Cambio',    icon: '💱', roles: ['admin', 'cajero'] },
   { href: '/prestaciones',  label: 'Prestaciones',      icon: '⭐', roles: ['admin', 'operador'] },
   { href: '/servicios',     label: 'Servicios',         icon: '⚙️', roles: ['admin', 'cajero'] },
+  { href: '/prestamos',     label: 'Préstamos',         icon: '💰', roles: ['admin'] },
   { href: '/cierre',        label: 'Cierre del Día',    icon: '🔒', roles: ['admin'] },
   { href: '/libros',        label: 'Libros Contables',  icon: '📖', roles: ['admin'] },
   { href: '/configuracion', label: 'Configuración',     icon: '🔧', roles: ['admin'] },

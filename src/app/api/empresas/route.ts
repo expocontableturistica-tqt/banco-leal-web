@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { db } from '@/lib/db'
-import { empresas, cuentas } from '@/lib/schema'
+import { empresas } from '@/lib/schema'
 import { eq } from 'drizzle-orm'
+import { crearCuentaEmpresa } from '@/lib/cuenta-utils'
 
 function generarNumeroEmpresa(usados: Set<string>): string {
   let n: string
@@ -41,6 +42,8 @@ export async function POST(req: Request) {
     cuit: (cuit ?? '').replace(/\D/g, ''),
     actividad: (actividad ?? '').trim(),
   }).returning()
+
+  await crearCuentaEmpresa(creada.id)
 
   return NextResponse.json(creada, { status: 201 })
 }

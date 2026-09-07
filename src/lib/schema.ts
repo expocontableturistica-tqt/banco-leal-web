@@ -169,3 +169,15 @@ export const banco = sqliteTable('banco', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   fondoTotal: real('fondo_total').default(0).notNull(),
 })
+
+// ── Préstamos a empresas ──────────────────────────────────────────────────────
+export const prestamos = sqliteTable('prestamos', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  empresaId: integer('empresa_id').notNull().references(() => empresas.id),
+  cuentaId: integer('cuenta_id').notNull().references(() => cuentas.id),
+  monto: real('monto').notNull(),
+  saldoPendiente: real('saldo_pendiente').notNull(),
+  concepto: text('concepto').default('Préstamo inicial'),
+  estado: text('estado', { enum: ['vigente', 'pagado', 'moroso'] }).default('vigente').notNull(),
+  createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
+})

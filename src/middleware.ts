@@ -7,7 +7,7 @@ const PORTAL_ROLES = ['empresa', 'socio']
 // Rutas a las que cada rol puede acceder dentro del panel banco
 const RUTAS_OPERADOR = ['/prestaciones', '/historial']
 const RUTAS_CAJERO   = ['/dashboard', '/socios', '/empresas', '/cajero', '/caja', '/cuentas', '/historial', '/cambio', '/servicios']
-const RUTAS_ADMIN    = [...RUTAS_CAJERO, '/prestaciones', '/cierre', '/libros', '/configuracion']
+const RUTAS_ADMIN    = [...RUTAS_CAJERO, '/prestaciones', '/cierre', '/libros', '/configuracion', '/prestamos']
 
 function puedeAcceder(path: string, rutas: string[]) {
   return rutas.some(r => path === r || path.startsWith(r + '/'))
@@ -17,11 +17,8 @@ export default auth((req) => {
   const { nextUrl, auth: session } = req
   const path = nextUrl.pathname
 
-  // API MediaPago — verifica API key, no sesión
-  if (path.startsWith('/api/mediapago')) {
-    const key = req.headers.get('x-api-key')
-    if (key !== process.env.MEDIAPAGO_API_KEY)
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // APIs con API key propia — verifican internamente
+  if (path.startsWith('/api/mediapago') || path.startsWith('/api/sistema-cobro')) {
     return NextResponse.next()
   }
 
