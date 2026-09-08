@@ -13,19 +13,30 @@ function normalizeHeader(h: string): string {
     .replace(/[^a-z0-9_]/g, '')
 }
 
+const KNOWN_HEADERS = new Set([
+  'razon_social', 'razon', 'empresa', 'nombre', 'apellido',
+  'cuit', 'dni', 'actividad', 'presupuesto', 'monto',
+  'nombre_fantasia', 'documento',
+])
+
 function parseExcel(buffer: Buffer): Record<string, string>[] {
   const wb = XLSX.read(buffer, { type: 'buffer' })
   const ws = wb.Sheets[wb.SheetNames[0]]
   if (!ws) return []
 
-  // sheet_to_json con header: 1 devuelve array de arrays
   const aoa: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
   if (aoa.length < 2) return []
 
-  const rawHeaders = aoa[0] as string[]
-  const headers = rawHeaders.map(normalizeHeader)
+  // Buscar la fila real de encabezados (puede haber filas de instrucciones arriba)
+  let headerIdx = 0
+  for (let i = 0; i < Math.min(aoa.length, 20); i++) {
+    const normalized = (aoa[i] as string[]).map(normalizeHeader)
+    if (normalized.some(h => KNOWN_HEADERS.has(h))) { headerIdx = i; break }
+  }
 
-  return (aoa.slice(1) as unknown[][])
+  const headers = (aoa[headerIdx] as string[]).map(normalizeHeader)
+
+  return (aoa.slice(headerIdx + 1) as unknown[][])
     .map(row => {
       const obj: Record<string, string> = {}
       headers.forEach((h, i) => { obj[h] = String(row[i] ?? '').trim() })
