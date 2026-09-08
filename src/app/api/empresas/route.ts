@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { db } from '@/lib/db'
-import { empresas } from '@/lib/schema'
-import { eq } from 'drizzle-orm'
+import { empresas, cuentas, prestamos, movimientosCuenta, codigosExternos } from '@/lib/schema'
+import { eq, inArray } from 'drizzle-orm'
 import { crearCuentaEmpresa } from '@/lib/cuenta-utils'
 
 function generarNumeroEmpresa(usados: Set<string>): string {
@@ -54,6 +54,20 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id } = await req.json()
+
+  // Cascade: movimientos → codigos_externos → prestamos → cuentas → empresa
+  const cuentasEmpresa = await db.select({ id: cuentas.id }).from(cuentas).where(eq(cuentas.empresaId, id))
+  const cuentaIds = cuentasEmpresa.map(c => c.id)
+
+  if (cuentaIds.length) {
+    await db.delete(movimientosCuenta).where(inArray(movimientosCuenta.cuentaId, cuentaIds))
+    await db.delete(codigosExternos).where(inArray(codigosExternos.cuentaId, cuentaIds))
+  }
+  await db.delete(prestamos).where(eq(prestamos.empresaId, id))
+  if (cuentaIds.length) {
+    await db.delete(cuentas).where(inArray(cuentas.id, cuentaIds))
+  }
   await db.delete(empresas).where(eq(empresas.id, id))
+
   return NextResponse.json({ ok: true })
 }
