@@ -22,8 +22,11 @@ const ROLE_COLOR: Record<string, string> = {
 
 const emptyForm = { email: '', name: '', password: '', role: 'cajero', numeroCaja: '', entityId: '' }
 
+interface MpEmpresa { empresaId: number; razonSocial: string; nombreFantasia: string; numeroEmpresa: string; cbu: string | null; alias: string | null }
+interface MpConfig { apiKey: string; empresas: MpEmpresa[] }
+
 export default function ConfiguracionPage() {
-  const [tab, setTab] = useState<'personal' | 'empresas' | 'socios' | 'reset'>('personal')
+  const [tab, setTab] = useState<'personal' | 'empresas' | 'socios' | 'mediapago' | 'reset'>('personal')
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
   const [externos, setExternos] = useState<Usuario[]>([])
   const [empresas, setEmpresas] = useState<Empresa[]>([])
@@ -36,6 +39,15 @@ export default function ConfiguracionPage() {
   const [msg, setMsg] = useState('')
   const [resetPwd, setResetPwd] = useState<{ id: string; name: string } | null>(null)
   const [newPwd, setNewPwd] = useState('')
+  const [mpConfig, setMpConfig] = useState<MpConfig | null>(null)
+  const [mpLoading, setMpLoading] = useState(false)
+  const [copied, setCopied] = useState<string | null>(null)
+
+  async function copyText(text: string, key: string) {
+    await navigator.clipboard.writeText(text)
+    setCopied(key)
+    setTimeout(() => setCopied(null), 1500)
+  }
 
   async function fetchTodo() {
     setLoading(true)
@@ -100,11 +112,22 @@ export default function ConfiguracionPage() {
   const usuEmpresas = externos.filter(u => u.role === 'empresa')
   const usuSocios   = externos.filter(u => u.role === 'socio')
 
+  useEffect(() => {
+    if (tab === 'mediapago' && !mpConfig && !mpLoading) {
+      setMpLoading(true)
+      fetch('/api/mediapago-config')
+        .then(r => r.json())
+        .then(d => { if (d.apiKey !== undefined) setMpConfig(d) })
+        .finally(() => setMpLoading(false))
+    }
+  }, [tab, mpConfig, mpLoading])
+
   const TABS = [
-    { k: 'personal', l: 'Personal del banco' },
-    { k: 'empresas', l: 'Usuarios Empresa' },
-    { k: 'socios',   l: 'Usuarios Socio' },
-    { k: 'reset',    l: '⚠ Reset del banco' },
+    { k: 'personal',   l: 'Personal del banco' },
+    { k: 'empresas',   l: 'Usuarios Empresa' },
+    { k: 'socios',     l: 'Usuarios Socio' },
+    { k: 'mediapago',  l: '🏦 MediaPago' },
+    { k: 'reset',      l: '⚠ Reset del banco' },
   ] as const
 
   return (
@@ -114,7 +137,7 @@ export default function ConfiguracionPage() {
           <h1 className="text-2xl font-bold text-gray-900 mb-1">Configuración</h1>
           <p className="text-sm text-gray-500">Gestión de usuarios y administración del sistema</p>
         </div>
-        {tab !== 'reset' && (
+        {tab !== 'reset' && tab !== 'mediapago' && (
           <button onClick={() => { setShowModal(true); setError(''); setForm({ ...emptyForm, role: tab === 'empresas' ? 'empresa' : tab === 'socios' ? 'socio' : 'cajero' }) }}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
             + Nuevo usuario
@@ -171,6 +194,97 @@ export default function ConfiguracionPage() {
                 <div className="text-center text-gray-400 text-sm mt-4">
                   No hay usuarios de socio.
                 </div>
+              )}
+            </div>
+          )}
+
+          {/* MediaPago */}
+          {tab === 'mediapago' && (
+            <div className="space-y-6">
+              {mpLoading && <p className="text-gray-500 text-sm">Cargando configuración...</p>}
+              {!mpLoading && !mpConfig && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
+                  No se pudo cargar la configuración. Solo los administradores pueden acceder.
+                </div>
+              )}
+              {mpConfig && (
+                <>
+                  {/* API Key */}
+                  <div className="bg-white rounded-xl border border-gray-200 p-5">
+                    <h2 className="text-sm font-semibold text-gray-800 mb-1">MEDIAPAGO_API_KEY</h2>
+                    <p className="text-xs text-gray-400 mb-3">
+                      Esta clave es la misma para todas las empresas. Ingresala en SistemaCobro → Configuración → Banco Leal Web.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono text-gray-800 break-all select-all">
+                        {mpConfig.apiKey || '(no configurada)'}
+                      </code>
+                      <button
+                        onClick={() => copyText(mpConfig.apiKey, 'apikey')}
+                        disabled={!mpConfig.apiKey}
+                        className="shrink-0 px-3 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-40 transition-colors">
+                        {copied === 'apikey' ? '✓ Copiado' : 'Copiar'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Tabla de empresas con CBU */}
+                  <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                    <div className="px-5 py-4 border-b border-gray-100">
+                      <h2 className="text-sm font-semibold text-gray-800">CBU por empresa</h2>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        Cada SistemaCobro debe tener el CBU de la empresa que lo usa. Copialo desde acá.
+                      </p>
+                    </div>
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50 border-b border-gray-200">
+                        <tr>
+                          <th className="text-left px-4 py-3 text-gray-600 font-medium text-xs">Empresa</th>
+                          <th className="text-left px-4 py-3 text-gray-600 font-medium text-xs">CBU</th>
+                          <th className="text-left px-4 py-3 text-gray-600 font-medium text-xs">Alias</th>
+                          <th className="px-4 py-3 w-24"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {mpConfig.empresas.map(emp => (
+                          <tr key={emp.empresaId} className="hover:bg-gray-50">
+                            <td className="px-4 py-3">
+                              <div className="font-medium text-gray-900 text-xs">{emp.razonSocial}</div>
+                              {emp.nombreFantasia && emp.nombreFantasia !== emp.razonSocial && (
+                                <div className="text-gray-400 text-xs">{emp.nombreFantasia}</div>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 font-mono text-xs text-gray-700">
+                              {emp.cbu ?? <span className="text-gray-300">—</span>}
+                            </td>
+                            <td className="px-4 py-3 text-xs text-gray-500">
+                              {emp.alias ?? <span className="text-gray-300">—</span>}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              {emp.cbu && (
+                                <button
+                                  onClick={() => copyText(emp.cbu!, `cbu-${emp.empresaId}`)}
+                                  className="text-xs text-blue-600 hover:text-blue-800 font-medium">
+                                  {copied === `cbu-${emp.empresaId}` ? '✓ Copiado' : 'Copiar CBU'}
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-xs text-blue-700 space-y-1">
+                    <p><strong>Cómo configurar SistemaCobro:</strong></p>
+                    <ol className="list-decimal list-inside space-y-0.5 pl-1">
+                      <li>Abrí SistemaCobro de la empresa correspondiente</li>
+                      <li>Andá a <strong>Configuración → Banco Leal Web</strong></li>
+                      <li>Pegá el CBU de esa empresa y la API Key de arriba</li>
+                      <li>Guardá y reiniciá la aplicación</li>
+                    </ol>
+                  </div>
+                </>
               )}
             </div>
           )}
