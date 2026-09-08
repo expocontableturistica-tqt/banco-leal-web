@@ -3,17 +3,35 @@ import { auth } from '@/auth'
 import { db } from '@/lib/db'
 import { socios, empresas } from '@/lib/schema'
 import { crearCuentaEmpresa } from '@/lib/cuenta-utils'
+import * as XLSX from 'xlsx'
 
-function parseCSV(text: string): Record<string, string>[] {
-  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(l => l.trim())
-  if (lines.length < 2) return []
-  const headers = lines[0].split(/[,;\t]/).map(h => h.trim().toLowerCase().replace(/\s+/g, '_'))
-  return lines.slice(1).map(line => {
-    const cols = line.split(/[,;\t]/).map(c => c.trim().replace(/^"|"$/g, ''))
-    const row: Record<string, string> = {}
-    headers.forEach((h, i) => { row[h] = cols[i] ?? '' })
-    return row
-  }).filter(r => Object.values(r).some(v => v))
+// Normaliza un header: "Razón Social" → "razon_social"
+function normalizeHeader(h: string): string {
+  return String(h).trim().toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/\s+/g, '_')
+    .replace(/[^a-z0-9_]/g, '')
+}
+
+function parseExcel(buffer: Buffer): Record<string, string>[] {
+  const wb = XLSX.read(buffer, { type: 'buffer' })
+  const ws = wb.Sheets[wb.SheetNames[0]]
+  if (!ws) return []
+
+  // sheet_to_json con header: 1 devuelve array de arrays
+  const aoa: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
+  if (aoa.length < 2) return []
+
+  const rawHeaders = aoa[0] as string[]
+  const headers = rawHeaders.map(normalizeHeader)
+
+  return (aoa.slice(1) as unknown[][])
+    .map(row => {
+      const obj: Record<string, string> = {}
+      headers.forEach((h, i) => { obj[h] = String(row[i] ?? '').trim() })
+      return obj
+    })
+    .filter(r => Object.values(r).some(v => v))
 }
 
 function generarNumero(prefix: string, usados: Set<string>): string {
@@ -32,9 +50,17 @@ export async function POST(req: Request) {
   const file = formData.get('file') as File | null
   if (!file) return NextResponse.json({ error: 'Archivo requerido' }, { status: 400 })
 
-  const text = await file.text()
-  const rows = parseCSV(text)
-  if (!rows.length) return NextResponse.json({ error: 'El archivo no tiene filas válidas' }, { status: 400 })
+  const arrayBuffer = await file.arrayBuffer()
+  const buffer = Buffer.from(arrayBuffer)
+
+  let rows: Record<string, string>[]
+  try {
+    rows = parseExcel(buffer)
+  } catch {
+    return NextResponse.json({ error: 'No se pudo leer el archivo Excel. Asegurate de usar el formato .xlsx' }, { status: 400 })
+  }
+
+  if (!rows.length) return NextResponse.json({ error: 'El archivo no tiene filas con datos' }, { status: 400 })
 
   if (tipo === 'socios') {
     const existing = await db.select({ ns: socios.numeroSocio }).from(socios)
@@ -76,7 +102,7 @@ export async function POST(req: Request) {
         razonSocial,
         nombreFantasia: (r.nombre_fantasia || '').trim(),
         cuit,
-        actividad: (r.actividad || '').trim(),
+        actividad: (r.actividad || r.rubro || '').trim(),
       }).returning()
       await crearCuentaEmpresa(creada.id)
       creados++

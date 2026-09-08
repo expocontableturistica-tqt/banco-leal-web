@@ -109,12 +109,18 @@ export default function SociosPage() {
         </div>
         {canEdit && (
           <div className="flex gap-2">
-            <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls,.txt" className="hidden" onChange={handleImport} />
+            <input ref={fileInputRef} type="file" accept=".xlsx" className="hidden" onChange={handleImport} />
+            <a
+              href="/api/import/template?tipo=socios"
+              className="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+            >
+              Planilla modelo
+            </a>
             <button
               onClick={() => fileInputRef.current?.click()}
               className="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
             >
-              Importar CSV
+              Importar Excel
             </button>
             <button
               onClick={() => { setShowModal(true); setError('') }}
