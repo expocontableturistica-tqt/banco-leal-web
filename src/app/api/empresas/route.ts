@@ -48,6 +48,31 @@ export async function POST(req: Request) {
   return NextResponse.json(creada, { status: 201 })
 }
 
+export async function PUT(req: Request) {
+  const session = await auth()
+  if (!session || !['admin', 'cajero'].includes(session.user?.role))
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  const { id, razonSocial, nombreFantasia, cuit, actividad } = await req.json()
+  if (!id || !razonSocial) return NextResponse.json({ error: 'Razón social requerida' }, { status: 400 })
+
+  const digits = cuit ? String(cuit).replace(/\D/g, '') : ''
+  if (digits && digits.length !== 11)
+    return NextResponse.json({ error: 'El CUIT debe tener 11 dígitos' }, { status: 400 })
+
+  const [updated] = await db.update(empresas)
+    .set({
+      razonSocial: razonSocial.trim(),
+      nombreFantasia: (nombreFantasia ?? '').trim(),
+      cuit: digits,
+      actividad: (actividad ?? '').trim(),
+    })
+    .where(eq(empresas.id, id))
+    .returning()
+
+  return NextResponse.json(updated)
+}
+
 export async function DELETE(req: Request) {
   const session = await auth()
   if (!session || session.user?.role !== 'admin')

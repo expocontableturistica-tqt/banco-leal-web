@@ -25,6 +25,7 @@ export default function SociosPage() {
   const [error, setError] = useState('')
   const [buscar, setBuscar] = useState('')
   const [importMsg, setImportMsg] = useState('')
+  const [editando, setEditando] = useState<Socio | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const isAdmin = session?.user?.role === 'admin'
@@ -65,6 +66,44 @@ export default function SociosPage() {
     setSaving(false)
   }
 
+  async function handleUpdate(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editando) return
+    setSaving(true)
+    setError('')
+    const res = await fetch('/api/socios', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: editando.id,
+        nombre: form.nombre,
+        apellido: form.apellido,
+        dni: form.dni,
+        montoAsignado: parseFloat(form.montoAsignado) || 0,
+      }),
+    })
+    if (res.ok) {
+      setEditando(null)
+      setForm(emptyForm)
+      fetchSocios()
+    } else {
+      const data = await res.json()
+      setError(data.error || 'Error al guardar')
+    }
+    setSaving(false)
+  }
+
+  function openEdit(s: Socio) {
+    setEditando(s)
+    setForm({
+      nombre: s.nombre,
+      apellido: s.apellido,
+      dni: s.dni || '',
+      montoAsignado: String(s.montoAsignado ?? 0),
+    })
+    setError('')
+  }
+
   async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -99,6 +138,80 @@ export default function SociosPage() {
     )
   })
 
+  const modalForm = (onSubmit: (e: React.FormEvent) => void, title: string) => (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h2 className="text-lg font-bold text-gray-900">{title}</h2>
+        </div>
+        <form onSubmit={onSubmit} className="p-6 space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Nombre *</label>
+              <input
+                type="text"
+                required
+                autoFocus
+                value={form.nombre}
+                onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Apellido *</label>
+              <input
+                type="text"
+                required
+                value={form.apellido}
+                onChange={e => setForm(f => ({ ...f, apellido: e.target.value }))}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">DNI <span className="text-gray-400">(opcional)</span></label>
+            <input
+              type="text"
+              value={form.dni}
+              onChange={e => setForm(f => ({ ...f, dni: e.target.value }))}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Sin puntos"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Monto asignado ($)</label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={form.montoAsignado}
+              onChange={e => setForm(f => ({ ...f, montoAsignado: e.target.value }))}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="0"
+            />
+          </div>
+          {error && <p className="text-red-500 text-xs">{error}</p>}
+          <div className="flex gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => { setShowModal(false); setEditando(null); setForm(emptyForm); setError('') }}
+              className="flex-1 border border-gray-300 rounded-lg px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex-1 bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            >
+              {saving ? 'Guardando...' : 'Guardar'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+
   return (
     <div>
       {/* Header */}
@@ -123,7 +236,7 @@ export default function SociosPage() {
               Importar Excel
             </button>
             <button
-              onClick={() => { setShowModal(true); setError('') }}
+              onClick={() => { setShowModal(true); setForm(emptyForm); setError('') }}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
             >
               + Nuevo socio
@@ -165,7 +278,7 @@ export default function SociosPage() {
                 <th className="text-left px-4 py-3 text-gray-600 font-medium">Apellido y nombre</th>
                 <th className="text-left px-4 py-3 text-gray-600 font-medium">DNI</th>
                 <th className="text-right px-4 py-3 text-gray-600 font-medium">Monto asignado</th>
-                {isAdmin && <th className="px-4 py-3 w-20"></th>}
+                {canEdit && <th className="px-4 py-3 w-32"></th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -177,14 +290,22 @@ export default function SociosPage() {
                   <td className="px-4 py-3 text-right font-medium text-gray-900">
                     ${s.montoAsignado.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
                   </td>
-                  {isAdmin && (
+                  {canEdit && (
                     <td className="px-4 py-3 text-right">
                       <button
-                        onClick={() => handleDelete(s.id, `${s.nombre} ${s.apellido}`)}
-                        className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors"
+                        onClick={() => openEdit(s)}
+                        className="text-blue-500 hover:text-blue-700 text-xs font-medium transition-colors mr-3"
                       >
-                        Eliminar
+                        Editar
                       </button>
+                      {isAdmin && (
+                        <button
+                          onClick={() => handleDelete(s.id, `${s.nombre} ${s.apellido}`)}
+                          className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors"
+                        >
+                          Eliminar
+                        </button>
+                      )}
                     </td>
                   )}
                 </tr>
@@ -194,80 +315,8 @@ export default function SociosPage() {
         </div>
       )}
 
-      {/* Modal nuevo socio */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-bold text-gray-900">Nuevo socio</h2>
-            </div>
-            <form onSubmit={handleAdd} className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Nombre *</label>
-                  <input
-                    type="text"
-                    required
-                    autoFocus
-                    value={form.nombre}
-                    onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Apellido *</label>
-                  <input
-                    type="text"
-                    required
-                    value={form.apellido}
-                    onChange={e => setForm(f => ({ ...f, apellido: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">DNI <span className="text-gray-400">(opcional)</span></label>
-                <input
-                  type="text"
-                  value={form.dni}
-                  onChange={e => setForm(f => ({ ...f, dni: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Sin puntos"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Monto asignado ($)</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={form.montoAsignado}
-                  onChange={e => setForm(f => ({ ...f, montoAsignado: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="0"
-                />
-              </div>
-              {error && <p className="text-red-500 text-xs">{error}</p>}
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => { setShowModal(false); setForm(emptyForm); setError('') }}
-                  className="flex-1 border border-gray-300 rounded-lg px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="flex-1 bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                >
-                  {saving ? 'Guardando...' : 'Guardar'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {showModal && modalForm(handleAdd, 'Nuevo socio')}
+      {editando && modalForm(handleUpdate, `Editar: ${editando.apellido}, ${editando.nombre}`)}
     </div>
   )
 }

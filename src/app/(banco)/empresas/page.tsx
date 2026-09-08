@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useSession } from 'next-auth/react'
+import Link from 'next/link'
 
 interface Empresa {
   id: number
@@ -30,6 +31,7 @@ export default function EmpresasPage() {
   const [error, setError] = useState('')
   const [buscar, setBuscar] = useState('')
   const [importMsg, setImportMsg] = useState('')
+  const [editando, setEditando] = useState<Empresa | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const isAdmin = session?.user?.role === 'admin'
@@ -63,6 +65,38 @@ export default function EmpresasPage() {
       setError(data.error || 'Error al guardar')
     }
     setSaving(false)
+  }
+
+  async function handleUpdate(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editando) return
+    setSaving(true)
+    setError('')
+    const res = await fetch('/api/empresas', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: editando.id, ...form }),
+    })
+    if (res.ok) {
+      setEditando(null)
+      setForm(emptyForm)
+      fetchEmpresas()
+    } else {
+      const data = await res.json()
+      setError(data.error || 'Error al guardar')
+    }
+    setSaving(false)
+  }
+
+  function openEdit(emp: Empresa) {
+    setEditando(emp)
+    setForm({
+      razonSocial: emp.razonSocial,
+      nombreFantasia: emp.nombreFantasia || '',
+      cuit: emp.cuit || '',
+      actividad: emp.actividad || '',
+    })
+    setError('')
   }
 
   async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
@@ -99,6 +133,81 @@ export default function EmpresasPage() {
     )
   })
 
+  const modalForm = (onSubmit: (e: React.FormEvent) => void, title: string) => (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h2 className="text-lg font-bold text-gray-900">{title}</h2>
+        </div>
+        <form onSubmit={onSubmit} className="p-6 space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Razón social *</label>
+            <input
+              type="text"
+              required
+              autoFocus
+              value={form.razonSocial}
+              onChange={e => setForm(f => ({ ...f, razonSocial: e.target.value }))}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              Nombre fantasía <span className="text-gray-400">(opcional)</span>
+            </label>
+            <input
+              type="text"
+              value={form.nombreFantasia}
+              onChange={e => setForm(f => ({ ...f, nombreFantasia: e.target.value }))}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              CUIT <span className="text-gray-400">(opcional, 11 dígitos sin guiones)</span>
+            </label>
+            <input
+              type="text"
+              value={form.cuit}
+              onChange={e => setForm(f => ({ ...f, cuit: e.target.value.replace(/\D/g, '').slice(0, 11) }))}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+              placeholder="20123456780"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              Actividad <span className="text-gray-400">(opcional)</span>
+            </label>
+            <input
+              type="text"
+              value={form.actividad}
+              onChange={e => setForm(f => ({ ...f, actividad: e.target.value }))}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Ej: Comercio minorista"
+            />
+          </div>
+          {error && <p className="text-red-500 text-xs">{error}</p>}
+          <div className="flex gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => { setShowModal(false); setEditando(null); setForm(emptyForm); setError('') }}
+              className="flex-1 border border-gray-300 rounded-lg px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex-1 bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            >
+              {saving ? 'Guardando...' : 'Guardar'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+
   return (
     <div>
       {/* Header */}
@@ -123,7 +232,7 @@ export default function EmpresasPage() {
               Importar Excel
             </button>
             <button
-              onClick={() => { setShowModal(true); setError('') }}
+              onClick={() => { setShowModal(true); setForm(emptyForm); setError('') }}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
             >
               + Nueva empresa
@@ -166,27 +275,42 @@ export default function EmpresasPage() {
                 <th className="text-left px-4 py-3 text-gray-600 font-medium">Nombre fantasía</th>
                 <th className="text-left px-4 py-3 text-gray-600 font-medium">CUIT</th>
                 <th className="text-left px-4 py-3 text-gray-600 font-medium">Actividad</th>
-                {isAdmin && <th className="px-4 py-3 w-20"></th>}
+                {canEdit && <th className="px-4 py-3 w-32"></th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filtradas.map(e => (
                 <tr key={e.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-4 py-3 font-mono text-gray-600">{e.numeroEmpresa}</td>
-                  <td className="px-4 py-3 font-medium text-gray-900">{e.razonSocial}</td>
+                  <td className="px-4 py-3 font-medium">
+                    <Link
+                      href={`/empresas/${e.id}`}
+                      className="text-blue-700 hover:underline"
+                    >
+                      {e.razonSocial}
+                    </Link>
+                  </td>
                   <td className="px-4 py-3 text-gray-500">{e.nombreFantasia || '—'}</td>
                   <td className="px-4 py-3 text-gray-500 font-mono">
                     {e.cuit ? formatCuit(e.cuit) : '—'}
                   </td>
                   <td className="px-4 py-3 text-gray-500">{e.actividad || '—'}</td>
-                  {isAdmin && (
+                  {canEdit && (
                     <td className="px-4 py-3 text-right">
                       <button
-                        onClick={() => handleDelete(e.id, e.razonSocial)}
-                        className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors"
+                        onClick={() => openEdit(e)}
+                        className="text-blue-500 hover:text-blue-700 text-xs font-medium transition-colors mr-3"
                       >
-                        Eliminar
+                        Editar
                       </button>
+                      {isAdmin && (
+                        <button
+                          onClick={() => handleDelete(e.id, e.razonSocial)}
+                          className="text-red-400 hover:text-red-600 text-xs font-medium transition-colors"
+                        >
+                          Eliminar
+                        </button>
+                      )}
                     </td>
                   )}
                 </tr>
@@ -196,81 +320,8 @@ export default function EmpresasPage() {
         </div>
       )}
 
-      {/* Modal nueva empresa */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-bold text-gray-900">Nueva empresa</h2>
-            </div>
-            <form onSubmit={handleAdd} className="p-6 space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Razón social *</label>
-                <input
-                  type="text"
-                  required
-                  autoFocus
-                  value={form.razonSocial}
-                  onChange={e => setForm(f => ({ ...f, razonSocial: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Nombre fantasía <span className="text-gray-400">(opcional)</span>
-                </label>
-                <input
-                  type="text"
-                  value={form.nombreFantasia}
-                  onChange={e => setForm(f => ({ ...f, nombreFantasia: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  CUIT <span className="text-gray-400">(opcional, 11 dígitos sin guiones)</span>
-                </label>
-                <input
-                  type="text"
-                  value={form.cuit}
-                  onChange={e => setForm(f => ({ ...f, cuit: e.target.value.replace(/\D/g, '').slice(0, 11) }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
-                  placeholder="20123456780"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Actividad <span className="text-gray-400">(opcional)</span>
-                </label>
-                <input
-                  type="text"
-                  value={form.actividad}
-                  onChange={e => setForm(f => ({ ...f, actividad: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Ej: Comercio minorista"
-                />
-              </div>
-              {error && <p className="text-red-500 text-xs">{error}</p>}
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => { setShowModal(false); setForm(emptyForm); setError('') }}
-                  className="flex-1 border border-gray-300 rounded-lg px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="flex-1 bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                >
-                  {saving ? 'Guardando...' : 'Guardar'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {showModal && modalForm(handleAdd, 'Nueva empresa')}
+      {editando && modalForm(handleUpdate, `Editar: ${editando.razonSocial}`)}
     </div>
   )
 }

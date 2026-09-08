@@ -41,6 +41,27 @@ export async function POST(req: Request) {
   return NextResponse.json(creado, { status: 201 })
 }
 
+export async function PUT(req: Request) {
+  const session = await auth()
+  if (!session || !['admin', 'cajero'].includes(session.user?.role))
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  const { id, nombre, apellido, dni, montoAsignado } = await req.json()
+  if (!id || !nombre || !apellido) return NextResponse.json({ error: 'Nombre y apellido requeridos' }, { status: 400 })
+
+  const [updated] = await db.update(socios)
+    .set({
+      nombre: nombre.trim(),
+      apellido: apellido.trim(),
+      dni: (dni ?? '').trim(),
+      montoAsignado: montoAsignado ?? 0,
+    })
+    .where(eq(socios.id, id))
+    .returning()
+
+  return NextResponse.json(updated)
+}
+
 export async function DELETE(req: Request) {
   const session = await auth()
   if (!session || session.user?.role !== 'admin')
