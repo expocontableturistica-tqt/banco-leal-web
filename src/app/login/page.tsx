@@ -34,8 +34,8 @@ export default function LoginPage() {
             </div>
           ) : (
             /* eslint-disable-next-line @next/next/no-img-element */
-            <img src="/logo.png" alt="Banco Leal S.A."
-              className="w-20 h-20 mx-auto mb-3 rounded-xl object-contain"
+            <img src="/logo_banco.png" alt="Banco Leal S.A."
+              className="w-20 h-20 mx-auto mb-3 rounded-full object-contain"
               onError={() => setLogoError(true)} />
           )}
           <h1 className="text-xl font-bold text-gray-900">Banco Leal S.A.</h1>
