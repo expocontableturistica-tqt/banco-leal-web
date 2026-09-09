@@ -9,6 +9,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [logoError, setLogoError] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -27,8 +28,16 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 w-full max-w-sm">
         <div className="text-center mb-6">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="Banco Leal S.A." className="w-32 h-32 mx-auto mb-3" />
+          {logoError ? (
+            <div className="w-20 h-20 mx-auto mb-3 rounded-2xl bg-blue-600 flex items-center justify-center">
+              <span className="text-white text-2xl font-bold">BL</span>
+            </div>
+          ) : (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img src="/logo.png" alt="Banco Leal S.A."
+              className="w-20 h-20 mx-auto mb-3 rounded-xl object-contain"
+              onError={() => setLogoError(true)} />
+          )}
           <h1 className="text-xl font-bold text-gray-900">Banco Leal S.A.</h1>
           <p className="text-sm text-gray-500 mt-1">Sistema bancario educativo</p>
         </div>
