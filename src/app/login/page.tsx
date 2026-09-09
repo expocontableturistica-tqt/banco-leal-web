@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { signIn } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -27,9 +28,14 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 w-full max-w-sm">
         <div className="text-center mb-6">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="Banco Leal S.A."
-            className="w-24 h-24 mx-auto mb-3 rounded-full object-contain" />
+          <Image
+            src="/logo.png"
+            alt="Banco Leal S.A."
+            width={96}
+            height={96}
+            className="mx-auto mb-3 rounded-full object-contain"
+            priority
+          />
           <h1 className="text-xl font-bold text-gray-900">Banco Leal S.A.</h1>
           <p className="text-sm text-gray-500 mt-1">Sistema bancario educativo</p>
         </div>
