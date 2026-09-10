@@ -1,5 +1,5 @@
 // Crea la tabla `inversiones` en la base Turso (migración 0005).
-// Uso:  node --env-file=.env.local scripts/aplicar-migracion-inversiones.mjs
+// Uso:  node scripts/aplicar-migracion-inversiones.mjs
 //
 // Es seguro: solo hace CREATE TABLE IF NOT EXISTS, no toca datos existentes.
 import { createClient } from '@libsql/client'
@@ -7,15 +7,33 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
-const url = (process.env.TURSO_DATABASE_URL ?? '').replace('libsql://', 'https://')
-const authToken = process.env.TURSO_AUTH_TOKEN
+const here = dirname(fileURLToPath(import.meta.url))
+const root = join(here, '..')
+
+// Carga simple de .env.local (KEY=VALUE, con o sin comillas)
+function loadEnv(file) {
+  let raw
+  try { raw = readFileSync(join(root, file), 'utf8') } catch { return {} }
+  const env = {}
+  for (const line of raw.split(/\r?\n/)) {
+    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/i)
+    if (!m) continue
+    let v = m[2].trim()
+    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1)
+    env[m[1]] = v
+  }
+  return env
+}
+
+const env = { ...loadEnv('.env.local'), ...loadEnv('.env'), ...process.env }
+const url = (env.TURSO_DATABASE_URL ?? '').replace('libsql://', 'https://')
+const authToken = env.TURSO_AUTH_TOKEN
 if (!url || !authToken) {
-  console.error('Faltan TURSO_DATABASE_URL / TURSO_AUTH_TOKEN. Corré con:  node --env-file=.env.local scripts/aplicar-migracion-inversiones.mjs')
+  console.error('No encontré TURSO_DATABASE_URL / TURSO_AUTH_TOKEN en .env.local')
   process.exit(1)
 }
 
-const here = dirname(fileURLToPath(import.meta.url))
-const sqlPath = join(here, '..', 'drizzle', '0005_salty_gertrude_yorkes.sql')
+const sqlPath = join(root, 'drizzle', '0005_salty_gertrude_yorkes.sql')
 const raw = readFileSync(sqlPath, 'utf8')
 
 const stmts = raw
