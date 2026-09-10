@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import ExportButtons from '@/components/ExportButtons'
 
 interface Socio { id: number; nombre: string; apellido: string; numeroSocio: string }
 
@@ -186,7 +187,29 @@ export default function PrestacionesPage() {
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-lg font-semibold text-gray-900">Historial</h2>
-          <p className="text-sm text-gray-400">{historial.length} registros</p>
+          <div className="flex items-center gap-3">
+            <p className="text-sm text-gray-400">{historial.length} registros</p>
+            <ExportButtons
+              filenameBase="prestaciones"
+              titulo="Historial de prestaciones"
+              sections={[{
+                columns: [
+                  { header: 'Fecha / hora', value: (p: Prestacion) => new Date(p.createdAt).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) },
+                  { header: 'Socio', value: (p: Prestacion) => p.socioApellido && p.socioNombre ? `${p.socioApellido}, ${p.socioNombre}` : `#${p.socioId}` },
+                  { header: 'N° Socio', value: (p: Prestacion) => p.socioNumero || '' },
+                  { header: 'Tipo', value: (p: Prestacion) => TIPOS.find(t => t.key === p.tipo)?.label ?? p.tipo },
+                  { header: 'Detalle', value: (p: Prestacion) => {
+                    let d: Record<string, unknown> = {}
+                    try { d = JSON.parse(p.datos) } catch { /* ignore */ }
+                    const monto = d.monto ? `$${Number(d.monto).toLocaleString('es-AR', { minimumFractionDigits: 2 })}` : ''
+                    return [monto, p.descripcion].filter(Boolean).join(' · ')
+                  } },
+                  { header: 'TID', value: (p: Prestacion) => p.tid },
+                ],
+                rows: historial,
+              }]}
+            />
+          </div>
         </div>
 
         {historial.length === 0 ? (

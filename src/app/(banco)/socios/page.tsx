@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useSession } from 'next-auth/react'
+import ExportButtons from '@/components/ExportButtons'
 
 interface Socio {
   id: number
@@ -220,6 +221,20 @@ export default function SociosPage() {
           <h1 className="text-2xl font-bold text-gray-900 mb-1">Socios</h1>
           <p className="text-sm text-gray-500">{socios.length} socios registrados</p>
         </div>
+        <div className="flex gap-2 items-start">
+          <ExportButtons
+            filenameBase="socios"
+            titulo="Listado de socios"
+            sections={[{
+              columns: [
+                { header: 'N° Socio', value: (s: Socio) => s.numeroSocio },
+                { header: 'Apellido y nombre', value: (s: Socio) => `${s.apellido}, ${s.nombre}` },
+                { header: 'DNI', value: (s: Socio) => s.dni || '' },
+                { header: 'Monto asignado', value: (s: Socio) => s.montoAsignado, moneda: true },
+              ],
+              rows: filtrados,
+            }]}
+          />
         {canEdit && (
           <div className="flex gap-2">
             <input ref={fileInputRef} type="file" accept=".xlsx" className="hidden" onChange={handleImport} />
@@ -243,6 +258,7 @@ export default function SociosPage() {
             </button>
           </div>
         )}
+        </div>
       </div>
 
       {importMsg && (

@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
+import ExportButtons from '@/components/ExportButtons'
 
 interface Cuenta { id: number; cbu: string; alias: string; saldo: number; tipo: string }
 interface Movimiento { id: number; tipo: 'credito' | 'debito'; monto: number; concepto: string; saldoPosterior: number; createdAt: string }
@@ -257,8 +258,22 @@ export default function PortalPage() {
       {/* ── MOVIMIENTOS ── */}
       {tab === 'movimientos' && (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-100">
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
             <p className="text-sm font-semibold text-gray-800">Historial de movimientos</p>
+            <ExportButtons
+              filenameBase="mis_movimientos"
+              titulo={`Movimientos de cuenta — ${nombreEntidad ?? ''}`}
+              sections={[{
+                columns: [
+                  { header: 'Fecha / hora', value: (m: Movimiento) => new Date(m.createdAt).toLocaleString('es-AR') },
+                  { header: 'Concepto', value: (m: Movimiento) => m.concepto || (m.tipo === 'credito' ? 'Crédito' : 'Débito') },
+                  { header: 'Tipo', value: (m: Movimiento) => (m.tipo === 'credito' ? 'Crédito' : 'Débito') },
+                  { header: 'Monto', value: (m: Movimiento) => (m.tipo === 'credito' ? m.monto : -m.monto), moneda: true },
+                  { header: 'Saldo posterior', value: (m: Movimiento) => m.saldoPosterior, moneda: true },
+                ],
+                rows: movimientos,
+              }]}
+            />
           </div>
           {movimientos.length === 0 ? (
             <p className="p-6 text-center text-gray-400 text-sm">Sin movimientos aún</p>

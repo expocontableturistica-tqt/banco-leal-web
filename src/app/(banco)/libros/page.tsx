@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import ExportButtons from '@/components/ExportButtons'
+import type { Section } from '@/lib/export'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -121,6 +123,63 @@ export default function LibrosPage() {
   const egresoTotal   = Object.entries(mayor).filter(([, v]) => v.tipo === 'egreso').reduce((a, [, v]) => a + (v.debe - v.haber), 0)
   const resultado     = ingresoTotal - egresoTotal
 
+  // ── Datos para exportar (Diario + Mayor + Balance) ──────────────────────────
+  const mayorRows = Object.entries(mayor)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([codigo, v]) => ({
+      codigo, nombre: v.nombre, tipo: v.tipo, debe: v.debe, haber: v.haber,
+      saldo: v.tipo === 'activo' || v.tipo === 'egreso' ? v.debe - v.haber : v.haber - v.debe,
+    }))
+
+  const balanceRows: { concepto: string; monto: number }[] = [
+    ...Object.entries(mayor).filter(([, v]) => v.tipo === 'activo').map(([cod, v]) => ({ concepto: `Activo · ${cod} ${v.nombre}`, monto: v.debe - v.haber })),
+    { concepto: 'TOTAL ACTIVO', monto: activoTotal },
+    ...Object.entries(mayor).filter(([, v]) => v.tipo === 'pasivo').map(([cod, v]) => ({ concepto: `Pasivo · ${cod} ${v.nombre}`, monto: v.haber - v.debe })),
+    { concepto: 'TOTAL PASIVO', monto: pasivoTotal },
+    { concepto: 'Ingresos del período', monto: ingresoTotal },
+    { concepto: 'Egresos del período', monto: egresoTotal },
+    { concepto: 'RESULTADO NETO', monto: resultado },
+  ]
+
+  const librosSections: Section[] = [
+    {
+      name: 'Libro Diario',
+      columns: [
+        { header: 'Fecha', value: (a: Asiento) => fmtFechaHora(a.fecha) },
+        { header: 'Origen', value: (a: Asiento) => (a.origen === 'manual' ? 'Manual' : 'Automático') },
+        { header: 'Concepto', value: (a: Asiento) => a.concepto },
+        { header: 'Cód. Debe', value: (a: Asiento) => a.debe.codigo },
+        { header: 'Cuenta Debe', value: (a: Asiento) => a.debe.cuenta },
+        { header: 'Debe', value: (a: Asiento) => a.debe.monto, moneda: true },
+        { header: 'Cód. Haber', value: (a: Asiento) => a.haber.codigo },
+        { header: 'Cuenta Haber', value: (a: Asiento) => a.haber.cuenta },
+        { header: 'Haber', value: (a: Asiento) => a.haber.monto, moneda: true },
+      ],
+      rows: asientos,
+      foot: ['', '', 'TOTALES', '', '', `$${fmt(asientos.reduce((s, a) => s + a.debe.monto, 0))}`, '', '', `$${fmt(asientos.reduce((s, a) => s + a.haber.monto, 0))}`],
+    },
+    {
+      name: 'Mayor',
+      columns: [
+        { header: 'Código', value: (m: typeof mayorRows[number]) => m.codigo },
+        { header: 'Cuenta', value: (m: typeof mayorRows[number]) => m.nombre },
+        { header: 'Tipo', value: (m: typeof mayorRows[number]) => m.tipo },
+        { header: 'Debe', value: (m: typeof mayorRows[number]) => m.debe, moneda: true },
+        { header: 'Haber', value: (m: typeof mayorRows[number]) => m.haber, moneda: true },
+        { header: 'Saldo', value: (m: typeof mayorRows[number]) => m.saldo, moneda: true },
+      ],
+      rows: mayorRows,
+    },
+    {
+      name: 'Balance',
+      columns: [
+        { header: 'Concepto', value: (b: { concepto: string; monto: number }) => b.concepto },
+        { header: 'Monto', value: (b: { concepto: string; monto: number }) => b.monto, moneda: true },
+      ],
+      rows: balanceRows,
+    },
+  ]
+
   return (
     <div>
       {/* Encabezado */}
@@ -207,7 +266,10 @@ export default function LibrosPage() {
               className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
         </div>
-        <div className="flex gap-1 ml-auto">
+        <div className="ml-auto flex items-center gap-3">
+          <ExportButtons filenameBase="libros_contables" titulo={`Libros contables (${desde} a ${hasta})`} sections={librosSections} />
+        </div>
+        <div className="flex gap-1">
           {(['diario', 'mayor', 'balance'] as Tab[]).map(t => (
             <button key={t} onClick={() => setTab(t)}
               className={`px-4 py-1.5 rounded-lg text-sm font-medium border capitalize transition-colors ${

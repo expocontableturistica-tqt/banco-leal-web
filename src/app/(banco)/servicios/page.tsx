@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import ExportButtons from '@/components/ExportButtons'
 
 interface Pago {
   id: number
@@ -210,12 +211,29 @@ export default function ServiciosPage() {
               </button>
             </div>
           </div>
-          {pagos.length > 0 && (
-            <div className="text-right">
-              <p className="text-xs text-gray-400">{pagos.length} pagos</p>
-              <p className="text-sm font-semibold font-mono text-gray-900">Total: ${fmt(totalHoy)}</p>
-            </div>
-          )}
+          <div className="flex items-center gap-3">
+            {pagos.length > 0 && (
+              <div className="text-right">
+                <p className="text-xs text-gray-400">{pagos.length} pagos</p>
+                <p className="text-sm font-semibold font-mono text-gray-900">Total: ${fmt(totalHoy)}</p>
+              </div>
+            )}
+            <ExportButtons
+              filenameBase="servicios"
+              titulo={`Pagos de servicios${soloHoy ? ' (hoy)' : ''}`}
+              sections={[{
+                columns: [
+                  { header: 'Fecha / hora', value: (p: Pago) => new Date(p.createdAt).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) },
+                  { header: 'Servicio', value: (p: Pago) => p.servicio },
+                  { header: 'Comprobante', value: (p: Pago) => p.nroComprobante || '' },
+                  { header: 'Socio', value: (p: Pago) => p.socioApellido && p.socioNombre ? `${p.socioApellido}, ${p.socioNombre}` : '' },
+                  { header: 'Monto', value: (p: Pago) => p.monto, moneda: true },
+                ],
+                rows: pagos,
+                foot: ['', '', '', 'Total cobrado', `$${fmt(totalHoy)}`],
+              }]}
+            />
+          </div>
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">

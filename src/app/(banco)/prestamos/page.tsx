@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import ExportButtons from '@/components/ExportButtons'
 
 interface Empresa { id: number; razonSocial: string; numeroEmpresa: string }
 interface Prestamo {
@@ -115,9 +116,33 @@ export default function PrestamosPage() {
 
   return (
     <div className="space-y-6 max-w-5xl">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Préstamos a Empresas</h1>
-        <p className="text-sm text-gray-500 mt-1">Otorgá fondos a las empresas de la expo y gestioná los pagos</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Préstamos a Empresas</h1>
+          <p className="text-sm text-gray-500 mt-1">Otorgá fondos a las empresas de la expo y gestioná los pagos</p>
+        </div>
+        <ExportButtons
+          filenameBase="prestamos"
+          titulo="Préstamos a empresas"
+          sections={[{
+            columns: [
+              { header: 'Empresa', value: (p: Prestamo) => p.razonSocial },
+              { header: 'Monto', value: (p: Prestamo) => p.monto, moneda: true },
+              { header: 'Saldo pendiente', value: (p: Prestamo) => p.saldoPendiente, moneda: true },
+              { header: 'Cuotas pagadas', value: (p: Prestamo) => `${p.cuotasPagadas}/${p.cuotas}`, align: 'center' },
+              { header: 'Valor cuota', value: (p: Prestamo) => p.montoCuota ?? (p.monto / (p.cuotas || 1)), moneda: true },
+              { header: 'Estado', value: (p: Prestamo) => p.estado },
+              { header: 'Fecha', value: (p: Prestamo) => new Date(p.createdAt).toLocaleDateString('es-AR') },
+            ],
+            rows: prestamos,
+            foot: [
+              'TOTALES',
+              `$${fmt(totalPrestado)}`,
+              `$${fmt(totalPendiente)}`,
+              '', '', '', '',
+            ],
+          }]}
+        />
       </div>
 
       {/* Stats */}

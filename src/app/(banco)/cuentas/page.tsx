@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
+import ExportButtons from '@/components/ExportButtons'
 
 interface Cuenta {
   id: number
@@ -120,14 +121,31 @@ export default function CuentasPage() {
             </span>
           </p>
         </div>
-        {canEdit && (
-          <button
-            onClick={() => { setShowModal(true); setError('') }}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-          >
-            + Nueva cuenta
-          </button>
-        )}
+        <div className="flex gap-2 items-start">
+          <ExportButtons
+            filenameBase="cuentas"
+            titulo="Listado de cuentas bancarias"
+            sections={[{
+              columns: [
+                { header: 'Titular', value: (c: Cuenta) => getNombreTitular(c) },
+                { header: 'Tipo', value: (c: Cuenta) => (c.tipo === 'CA' ? 'Cta. Ahorro' : 'Cta. Corriente') },
+                { header: 'Alias', value: (c: Cuenta) => c.alias },
+                { header: 'CBU', value: (c: Cuenta) => c.cbu },
+                { header: 'Saldo', value: (c: Cuenta) => c.saldo, moneda: true },
+                { header: 'Estado', value: (c: Cuenta) => c.estado },
+              ],
+              rows: filtradas,
+            }]}
+          />
+          {canEdit && (
+            <button
+              onClick={() => { setShowModal(true); setError('') }}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+            >
+              + Nueva cuenta
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Buscador */}

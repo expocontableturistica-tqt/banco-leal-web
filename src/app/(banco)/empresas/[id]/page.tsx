@@ -4,6 +4,7 @@ import { db } from '@/lib/db'
 import { empresas, cuentas, movimientosCuenta, prestamos } from '@/lib/schema'
 import { eq, desc } from 'drizzle-orm'
 import Link from 'next/link'
+import FichaExport from './FichaExport'
 
 function fmt(n: number) {
   return n.toLocaleString('es-AR', { minimumFractionDigits: 2 })
@@ -49,7 +50,14 @@ export default async function EmpresaFichaPage({ params }: { params: Promise<{ i
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Back */}
-      <Link href="/empresas" className="text-sm text-blue-600 hover:underline">← Volver a Empresas</Link>
+      <div className="flex items-center justify-between gap-3">
+        <Link href="/empresas" className="text-sm text-blue-600 hover:underline">← Volver a Empresas</Link>
+        <FichaExport
+          nombre={empresa.nombreFantasia || empresa.razonSocial}
+          movimientos={movimientos}
+          loans={loans}
+        />
+      </div>
 
       {/* Cabecera empresa */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">

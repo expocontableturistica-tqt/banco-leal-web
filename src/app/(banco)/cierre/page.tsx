@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import ExportButtons from '@/components/ExportButtons'
 
 interface ResumenCierre {
   fecha: string
@@ -106,6 +107,20 @@ export default function CierrePage() {
   const netoCuentas = data.cuentas.creditos.monto - data.cuentas.debitos.monto
   const netoCambio  = data.cambio.ventas.montoARS - data.cambio.compras.montoARS
 
+  const cierreRows: { concepto: string; cantidad: number | string; monto: number | string }[] = [
+    { concepto: 'Cuentas · Créditos (ingresos)', cantidad: data.cuentas.creditos.cantidad, monto: data.cuentas.creditos.monto },
+    { concepto: 'Cuentas · Débitos (egresos)', cantidad: data.cuentas.debitos.cantidad, monto: data.cuentas.debitos.monto },
+    { concepto: 'Cuentas · Neto', cantidad: '', monto: netoCuentas },
+    { concepto: 'Caja · Ingresos de efectivo', cantidad: data.caja.ingresos.cantidad, monto: data.caja.ingresos.monto },
+    { concepto: 'Caja · Egresos de efectivo', cantidad: data.caja.egresos.cantidad, monto: data.caja.egresos.monto },
+    { concepto: 'Caja · Neto efectivo', cantidad: '', monto: data.caja.ingresos.monto - data.caja.egresos.monto },
+    { concepto: 'Servicios cobrados', cantidad: data.servicios.cantidad, monto: data.servicios.monto },
+    { concepto: 'Cambio · Ventas de divisas (ARS)', cantidad: data.cambio.ventas.cantidad, monto: data.cambio.ventas.montoARS },
+    { concepto: 'Cambio · Compras de divisas (ARS)', cantidad: data.cambio.compras.cantidad, monto: data.cambio.compras.montoARS },
+    { concepto: 'Cambio · Neto ARS', cantidad: '', monto: netoCambio },
+    ...data.prestaciones.map(p => ({ concepto: `Prestación · ${TIPO_PREST[p.tipo] ?? p.tipo}`, cantidad: p.cantidad, monto: '' as string })),
+  ]
+
   return (
     <div className="max-w-4xl">
       {/* Encabezado */}
@@ -119,10 +134,24 @@ export default function CierrePage() {
             </p>
           )}
         </div>
-        <button onClick={fetchData}
-          className="text-xs text-blue-600 border border-blue-200 rounded-lg px-3 py-1.5 hover:bg-blue-50 transition-colors">
-          Actualizar
-        </button>
+        <div className="flex items-start gap-2">
+          <ExportButtons
+            filenameBase="cierre_del_dia"
+            titulo={`Cierre del día — ${fmtFechaHora(data.fecha)}`}
+            sections={[{
+              columns: [
+                { header: 'Concepto', value: (r: { concepto: string }) => r.concepto },
+                { header: 'Cantidad', value: (r: { cantidad: number | string }) => r.cantidad, align: 'center' },
+                { header: 'Monto', value: (r: { monto: number | string }) => (typeof r.monto === 'number' ? r.monto : ''), moneda: true },
+              ],
+              rows: cierreRows,
+            }]}
+          />
+          <button onClick={fetchData}
+            className="text-xs text-blue-600 border border-blue-200 rounded-lg px-3 py-1.5 hover:bg-blue-50 transition-colors">
+            Actualizar
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">

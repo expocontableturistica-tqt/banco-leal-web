@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
+import ExportButtons from '@/components/ExportButtons'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -123,10 +124,43 @@ export default function HistorialPage() {
           <h1 className="text-2xl font-bold text-gray-900 mb-1">Historial</h1>
           <p className="text-sm text-gray-500">Movimientos de cuentas y caja</p>
         </div>
-        <button onClick={fetchData}
-          className="text-xs text-blue-600 border border-blue-200 rounded-lg px-3 py-1.5 hover:bg-blue-50 transition-colors">
-          Actualizar
-        </button>
+        <div className="flex gap-2 items-start">
+          <ExportButtons
+            filenameBase="historial"
+            titulo={`Historial de movimientos (${desde} a ${hasta})`}
+            sections={[
+              {
+                name: 'Movimientos de cuenta',
+                columns: [
+                  { header: 'Fecha / hora', value: (m: MovCuenta) => fmtFecha(m.createdAt) },
+                  { header: 'Titular', value: (m: MovCuenta) => m.razonSocial ? m.razonSocial : (m.socioApellido && m.socioNombre ? `${m.socioApellido}, ${m.socioNombre}` : '') },
+                  { header: 'Cuenta', value: (m: MovCuenta) => `${m.tipoCuenta} · ${m.alias}` },
+                  { header: 'Tipo', value: (m: MovCuenta) => m.tipo },
+                  { header: 'Concepto', value: (m: MovCuenta) => m.concepto || '' },
+                  { header: 'Monto', value: (m: MovCuenta) => (m.tipo === 'debito' ? -m.monto : m.monto), moneda: true },
+                  { header: 'Saldo posterior', value: (m: MovCuenta) => m.saldoPosterior, moneda: true },
+                ],
+                rows: movCuenta,
+              },
+              {
+                name: 'Movimientos de caja',
+                columns: [
+                  { header: 'Fecha / hora', value: (m: MovCaja) => fmtFecha(m.createdAt) },
+                  { header: 'Ventanilla', value: (m: MovCaja) => m.cajaUserId ? `Ventanilla ${m.numeroCaja ?? '?'}${m.cajeroNombre ? ` · ${m.cajeroNombre}` : ''}` : 'Bóveda' },
+                  { header: 'Tipo', value: (m: MovCaja) => TIPO_CAJA_LABEL[m.tipo] ?? m.tipo },
+                  { header: 'Concepto', value: (m: MovCaja) => m.concepto || '' },
+                  { header: 'Monto', value: (m: MovCaja) => m.monto, moneda: true },
+                  { header: 'Saldo posterior', value: (m: MovCaja) => m.saldoPosterior, moneda: true },
+                ],
+                rows: movCaja,
+              },
+            ]}
+          />
+          <button onClick={fetchData}
+            className="text-xs text-blue-600 border border-blue-200 rounded-lg px-3 py-1.5 hover:bg-blue-50 transition-colors">
+            Actualizar
+          </button>
+        </div>
       </div>
 
       {/* Filtros */}

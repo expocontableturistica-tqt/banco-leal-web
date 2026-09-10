@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
+import ExportButtons from '@/components/ExportButtons'
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -324,7 +325,38 @@ export default function CambioPage() {
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
             <p className="text-sm font-semibold text-gray-700">Últimas operaciones</p>
-            <p className="text-xs text-gray-400">{historial.length} registros</p>
+            <div className="flex items-center gap-3">
+              <p className="text-xs text-gray-400">{historial.length} registros</p>
+              <ExportButtons
+                filenameBase="mesa_de_cambio"
+                titulo="Mesa de Cambio"
+                sections={[
+                  {
+                    name: 'Cotizaciones y reservas',
+                    columns: [
+                      { header: 'Divisa', value: (d: Divisa) => `${DIVISA_META[d].nombre} (${d})` },
+                      { header: 'Compra', value: (d: Divisa) => tasas[d]?.compra ?? 0, moneda: true },
+                      { header: 'Venta', value: (d: Divisa) => tasas[d]?.venta ?? 0, moneda: true },
+                      { header: 'Reserva', value: (d: Divisa) => `${fmt(reservas[d] ?? 0, 2)} ${d}`, align: 'right' },
+                    ],
+                    rows: DIVISAS,
+                  },
+                  {
+                    name: 'Operaciones',
+                    columns: [
+                      { header: 'Fecha', value: (op: Operacion) => fmtFecha(op.createdAt) },
+                      { header: 'Operación', value: (op: Operacion) => (op.operacion === 'venta' ? 'Venta' : 'Compra') },
+                      { header: 'Divisa', value: (op: Operacion) => op.divisa },
+                      { header: 'Monto', value: (op: Operacion) => fmt(op.monto, 2), align: 'right' },
+                      { header: 'Cotización', value: (op: Operacion) => op.tasaCambio, moneda: true },
+                      { header: 'ARS', value: (op: Operacion) => op.montoARS, moneda: true },
+                      { header: 'Socio', value: (op: Operacion) => op.socioApellido && op.socioNombre ? `${op.socioApellido}, ${op.socioNombre}` : '' },
+                    ],
+                    rows: historial,
+                  },
+                ]}
+              />
+            </div>
           </div>
           {loading ? (
             <p className="text-sm text-gray-400 p-4">Cargando...</p>

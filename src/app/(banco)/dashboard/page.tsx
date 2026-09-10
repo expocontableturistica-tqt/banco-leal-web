@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
+import ExportButtons from '@/components/ExportButtons'
 
 interface DashboardData {
   socios: number
@@ -125,9 +126,26 @@ export default function DashboardPage() {
 
       {/* Últimos movimientos de cuentas */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-3">
           <p className="text-sm font-semibold text-gray-700">Últimos movimientos en cuentas (hoy)</p>
-          {data && <p className="text-xs text-gray-400">{data.ultimosMovimientos.length} registros</p>}
+          {data && (
+            <div className="flex items-center gap-3">
+              <p className="text-xs text-gray-400">{data.ultimosMovimientos.length} registros</p>
+              <ExportButtons
+                filenameBase="inicio_movimientos_hoy"
+                titulo="Últimos movimientos en cuentas (hoy)"
+                sections={[{
+                  columns: [
+                    { header: 'Hora', value: (m: DashboardData['ultimosMovimientos'][number]) => fmtHora(m.createdAt) },
+                    { header: 'Tipo', value: (m: DashboardData['ultimosMovimientos'][number]) => m.tipo },
+                    { header: 'Concepto', value: (m: DashboardData['ultimosMovimientos'][number]) => m.concepto || '' },
+                    { header: 'Monto', value: (m: DashboardData['ultimosMovimientos'][number]) => (m.tipo === 'debito' ? -m.monto : m.monto), moneda: true },
+                  ],
+                  rows: data.ultimosMovimientos,
+                }]}
+              />
+            </div>
+          )}
         </div>
         {!data ? (
           <p className="text-gray-400 text-sm p-5">Cargando...</p>

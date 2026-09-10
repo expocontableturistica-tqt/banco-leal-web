@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
+import ExportButtons from '@/components/ExportButtons'
+import type { Col } from '@/lib/export'
 
 interface CajaRow {
   id: number
@@ -57,6 +59,14 @@ const TIPO_SIGNO: Record<string, string> = {
 
 function fmt(n: number) { return n.toLocaleString('es-AR', { minimumFractionDigits: 2 }) }
 function hora(s: string) { return new Date(s).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) }
+
+const MOV_CAJA_COLS: Col<Movimiento>[] = [
+  { header: 'Fecha / hora', value: m => new Date(m.createdAt).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) },
+  { header: 'Tipo', value: m => TIPO_LABEL[m.tipo] ?? m.tipo },
+  { header: 'Concepto', value: m => m.concepto || '' },
+  { header: 'Monto', value: m => m.monto, moneda: true },
+  { header: 'Saldo', value: m => m.saldoPosterior, moneda: true },
+]
 
 export default function CajaPage() {
   const { data: session } = useSession()
@@ -141,6 +151,11 @@ export default function CajaPage() {
           )}
         </div>
 
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-gray-700">Movimientos de mi ventanilla</h2>
+          <ExportButtons filenameBase="caja_ventanilla" titulo={`Movimientos de ventanilla${miCaja?.numeroCaja ? ` ${miCaja.numeroCaja}` : ''}`}
+            sections={[{ columns: MOV_CAJA_COLS, rows: movimientos }]} />
+        </div>
         <MovimientosTabla movimientos={movimientos} />
 
         {showAbrirVentanilla && (
@@ -245,7 +260,11 @@ export default function CajaPage() {
 
       {/* Movimientos de la bóveda */}
       <div>
-        <h2 className="text-sm font-semibold text-gray-700 mb-3">Movimientos de la bóveda</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-gray-700">Movimientos de la bóveda</h2>
+          <ExportButtons filenameBase="caja_boveda" titulo="Movimientos de la bóveda"
+            sections={[{ columns: MOV_CAJA_COLS, rows: movBoveda }]} />
+        </div>
         <MovimientosTabla movimientos={movBoveda} />
       </div>
 

@@ -12,6 +12,8 @@
     "@libsql/client": "^0.18.0",
     "bcryptjs": "^3.0.3",
     "drizzle-orm": "^0.45.2",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "next": "16.3.4",
     "next-auth": "^5.0.0-beta.32",
     "qrcode": "^1.5.4",

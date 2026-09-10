@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import ExportButtons from '@/components/ExportButtons'
 
 type RolInterno = 'admin' | 'cajero' | 'operador'
 type RolExterno = 'empresa' | 'socio'
@@ -230,11 +231,27 @@ export default function ConfiguracionPage() {
 
                   {/* Tabla de empresas con CBU */}
                   <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                    <div className="px-5 py-4 border-b border-gray-100">
-                      <h2 className="text-sm font-semibold text-gray-800">CBU por empresa</h2>
-                      <p className="text-xs text-gray-400 mt-0.5">
-                        Cada SistemaCobro debe tener el CBU de la empresa que lo usa. Copialo desde acá.
-                      </p>
+                    <div className="px-5 py-4 border-b border-gray-100 flex items-start justify-between gap-3">
+                      <div>
+                        <h2 className="text-sm font-semibold text-gray-800">CBU por empresa</h2>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          Cada SistemaCobro debe tener el CBU de la empresa que lo usa. Copialo desde acá.
+                        </p>
+                      </div>
+                      <ExportButtons
+                        filenameBase="mediapago_cbu_por_empresa"
+                        titulo="MediaPago — CBU por empresa"
+                        sections={[{
+                          columns: [
+                            { header: 'N° Empresa', value: (e: MpEmpresa) => e.numeroEmpresa },
+                            { header: 'Razón social', value: (e: MpEmpresa) => e.razonSocial },
+                            { header: 'Nombre fantasía', value: (e: MpEmpresa) => e.nombreFantasia || '' },
+                            { header: 'CBU', value: (e: MpEmpresa) => e.cbu ?? '' },
+                            { header: 'Alias', value: (e: MpEmpresa) => e.alias ?? '' },
+                          ],
+                          rows: mpConfig.empresas,
+                        }]}
+                      />
                     </div>
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50 border-b border-gray-200">

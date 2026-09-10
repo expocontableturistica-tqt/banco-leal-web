@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import Link from 'next/link'
+import ExportButtons from '@/components/ExportButtons'
 
 interface Empresa {
   id: number
@@ -216,6 +217,21 @@ export default function EmpresasPage() {
           <h1 className="text-2xl font-bold text-gray-900 mb-1">Empresas</h1>
           <p className="text-sm text-gray-500">{empresas.length} empresas registradas</p>
         </div>
+        <div className="flex gap-2 items-start">
+          <ExportButtons
+            filenameBase="empresas"
+            titulo="Listado de empresas"
+            sections={[{
+              columns: [
+                { header: 'N° Empresa', value: (e: Empresa) => e.numeroEmpresa },
+                { header: 'Razón social', value: (e: Empresa) => e.razonSocial },
+                { header: 'Nombre fantasía', value: (e: Empresa) => e.nombreFantasia || '' },
+                { header: 'CUIT', value: (e: Empresa) => (e.cuit ? formatCuit(e.cuit) : '') },
+                { header: 'Actividad', value: (e: Empresa) => e.actividad || '' },
+              ],
+              rows: filtradas,
+            }]}
+          />
         {canEdit && (
           <div className="flex gap-2">
             <input ref={fileInputRef} type="file" accept=".xlsx" className="hidden" onChange={handleImport} />
@@ -239,6 +255,7 @@ export default function EmpresasPage() {
             </button>
           </div>
         )}
+        </div>
       </div>
 
       {importMsg && (
