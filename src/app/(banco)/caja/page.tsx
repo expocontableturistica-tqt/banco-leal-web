@@ -77,6 +77,7 @@ export default function CajaPage() {
 
   // modales
   const [showAbrirBoveda, setShowAbrirBoveda] = useState(false)
+  const [showIngresarBoveda, setShowIngresarBoveda] = useState(false)
   const [showAbrirVentanilla, setShowAbrirVentanilla] = useState(false)
   const [montoModal, setMontoModal] = useState('')
   const [procesando, setProcesando] = useState(false)
@@ -101,7 +102,7 @@ export default function CajaPage() {
     })
     const json = await res.json()
     if (!res.ok) setErrorModal(json.error || 'Error')
-    else { setShowAbrirBoveda(false); setShowAbrirVentanilla(false); setMontoModal(''); fetchData() }
+    else { setShowAbrirBoveda(false); setShowIngresarBoveda(false); setShowAbrirVentanilla(false); setMontoModal(''); fetchData() }
     setProcesando(false)
   }
 
@@ -226,11 +227,17 @@ export default function CajaPage() {
             Abrir bóveda
           </button>
         ) : (
-          <button onClick={() => { if (confirm('¿Cerrar la bóveda?')) accion({ accion: 'cerrar_boveda' }) }}
-            disabled={procesando}
-            className="bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-900 disabled:opacity-50 transition-colors">
-            Cerrar bóveda
-          </button>
+          <>
+            <button onClick={() => { setMontoModal(''); setErrorModal(''); setShowIngresarBoveda(true) }}
+              className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors">
+              Ingresar fondos
+            </button>
+            <button onClick={() => { if (confirm('¿Cerrar la bóveda?')) accion({ accion: 'cerrar_boveda' }) }}
+              disabled={procesando}
+              className="bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-900 disabled:opacity-50 transition-colors">
+              Cerrar bóveda
+            </button>
+          </>
         )}
       </div>
 
@@ -283,6 +290,27 @@ export default function CajaPage() {
             <button disabled={procesando} onClick={() => accion({ accion: 'abrir_boveda', monto: parseFloat(montoModal) || 0 })}
               className="flex-1 bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
               {procesando ? 'Abriendo...' : 'Abrir bóveda'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* Modal ingresar fondos a la bóveda */}
+      {showIngresarBoveda && (
+        <Modal titulo="Ingresar fondos a la bóveda" onClose={() => { setShowIngresarBoveda(false); setErrorModal('') }}>
+          <p className="text-xs text-gray-500 mb-3">Suma efectivo al fondo del banco sin cerrar la bóveda.</p>
+          <label className="block text-xs font-medium text-gray-700 mb-1">Monto a ingresar ($)</label>
+          <input type="number" min="0" step="0.01" autoFocus value={montoModal}
+            onChange={e => setMontoModal(e.target.value)}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-green-500"
+            placeholder="0.00" />
+          {errorModal && <p className="text-red-500 text-xs mt-2">{errorModal}</p>}
+          <div className="flex gap-2 mt-4">
+            <button type="button" onClick={() => { setShowIngresarBoveda(false); setErrorModal('') }}
+              className="flex-1 border border-gray-300 rounded-lg px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">Cancelar</button>
+            <button disabled={procesando} onClick={() => accion({ accion: 'ingresar_boveda', monto: parseFloat(montoModal) || 0 })}
+              className="flex-1 bg-green-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-green-700 disabled:opacity-50">
+              {procesando ? 'Ingresando...' : 'Ingresar fondos'}
             </button>
           </div>
         </Modal>

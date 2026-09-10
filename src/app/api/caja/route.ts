@@ -105,6 +105,20 @@ export async function POST(req: Request) {
     return NextResponse.json(updated)
   }
 
+  // ── Bóveda: ingresar fondos sin cerrar (solo admin) ───────────────────────
+  if (accion === 'ingresar_boveda') {
+    if (role !== 'admin') return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
+    const boveda = await getBoveda()
+    if (!boveda.id || boveda.estado !== 'abierta')
+      return NextResponse.json({ error: 'La bóveda no está abierta' }, { status: 400 })
+    const m = Math.max(0, Math.round((monto ?? 0) * 100) / 100)
+    if (m <= 0) return NextResponse.json({ error: 'Ingresá un monto mayor a cero' }, { status: 400 })
+    const nuevoSaldo = Math.round((boveda.saldoEfectivo + m) * 100) / 100
+    await db.update(caja).set({ saldoEfectivo: nuevoSaldo }).where(eq(caja.id, boveda.id))
+    await registrarMovimiento(boveda.id, 'ingreso', m, concepto || 'Ingreso de fondos a la bóveda', nuevoSaldo)
+    return NextResponse.json({ ok: true, saldoEfectivo: nuevoSaldo })
+  }
+
   // ── Cajero: abrir su ventanilla ───────────────────────────────────────────
   if (accion === 'abrir') {
     const existente = await getCajaDeUsuario(userId)
