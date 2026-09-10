@@ -192,6 +192,17 @@ export const inversiones = sqliteTable('inversiones', {
   closedAt: text('closed_at'),
 })
 
+// ── Avisos de pago QR (MediaPago → banco-web → SistemaCobro) ─────────────────
+// El celular deja acá el comprobante firmado y el POS lo retira por tid, así
+// el cobro no depende de la red local de la escuela.
+export const cobrosQr = sqliteTable('cobros_qr', {
+  tid: text('tid').primaryKey(),
+  comercioId: text('comercio_id').notNull(),
+  payload: text('payload').notNull(),
+  createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
+  retiradoAt: text('retirado_at'),
+})
+
 // ── Préstamos a empresas ──────────────────────────────────────────────────────
 export const prestamos = sqliteTable('prestamos', {
   id: integer('id').primaryKey({ autoIncrement: true }),

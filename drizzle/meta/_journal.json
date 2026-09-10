@@ -43,6 +43,13 @@
       "when": 1789053111011,
       "tag": "0005_salty_gertrude_yorkes",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1789069506481,
+      "tag": "0006_thin_selene",
+      "breakpoints": true
     }
   ]
 }
