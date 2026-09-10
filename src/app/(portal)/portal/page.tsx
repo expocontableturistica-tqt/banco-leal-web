@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import ExportButtons from '@/components/ExportButtons'
+import Inversiones from './Inversiones'
 
 interface Cuenta { id: number; cbu: string; alias: string; saldo: number; tipo: string }
 interface Movimiento { id: number; tipo: 'credito' | 'debito'; monto: number; concepto: string; saldoPosterior: number; createdAt: string }
@@ -11,7 +12,7 @@ interface Prestamo {
 }
 interface Entidad { id: number; razonSocial?: string; nombre?: string; apellido?: string; numeroEmpresa?: string; numeroSocio?: string; actividad?: string }
 
-type TabKey = 'inicio' | 'movimientos' | 'prestamo' | 'depositar'
+type TabKey = 'inicio' | 'movimientos' | 'inversiones' | 'prestamo' | 'depositar'
 
 function fmt(n: number) {
   return n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -129,6 +130,7 @@ export default function PortalPage() {
   const tabs: [TabKey, string][] = [
     ['inicio', 'Inicio'],
     ['movimientos', 'Movimientos'],
+    ['inversiones', 'Inversiones'],
     ...(isEmpresa ? [['prestamo', 'Préstamo'], ['depositar', 'Depositar']] as [TabKey, string][] : []),
   ]
 
@@ -302,6 +304,9 @@ export default function PortalPage() {
           )}
         </div>
       )}
+
+      {/* ── INVERSIONES ── */}
+      {tab === 'inversiones' && <Inversiones />}
 
       {/* ── PRÉSTAMO ── */}
       {tab === 'prestamo' && isEmpresa && (

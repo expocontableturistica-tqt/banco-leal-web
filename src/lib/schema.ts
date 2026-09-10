@@ -170,6 +170,28 @@ export const banco = sqliteTable('banco', {
   fondoTotal: real('fondo_total').default(0).notNull(),
 })
 
+// ── Inversiones (simulador de homebanking) ───────────────────────────────────
+// Posiciones ficticias con cotizaciones reales. Impactan el saldo real de la
+// cuenta (débito al invertir, crédito al rescatar) y quedan en el historial.
+export const inversiones = sqliteTable('inversiones', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  cuentaId: integer('cuenta_id').notNull().references(() => cuentas.id),
+  tipo: text('tipo', { enum: ['divisa', 'plazo_fijo', 'fci', 'accion'] }).notNull(),
+  activo: text('activo').notNull(),                 // 'USD' | 'EUR' | ticker | id de fondo | 'PF'
+  nombre: text('nombre').default(''),               // descripción legible
+  cantidad: real('cantidad').notNull(),             // unidades / cuotapartes / 1 (plazo fijo)
+  precioUnitario: real('precio_unitario').notNull(),// ARS por unidad al momento de invertir
+  montoInvertido: real('monto_invertido').notNull(),// ARS colocados
+  tna: real('tna'),                                 // solo plazo fijo (fracción anual, ej: 0.35)
+  fechaVencimiento: text('fecha_vencimiento'),      // solo plazo fijo (YYYY-MM-DD)
+  montoFinal: real('monto_final'),                  // solo plazo fijo: capital + interés al vencimiento
+  estado: text('estado', { enum: ['abierta', 'cerrada'] }).default('abierta').notNull(),
+  resultado: real('resultado'),                     // ARS de ganancia/pérdida al cerrar
+  montoRescatado: real('monto_rescatado'),          // ARS devueltos a la cuenta al cerrar
+  createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
+  closedAt: text('closed_at'),
+})
+
 // ── Préstamos a empresas ──────────────────────────────────────────────────────
 export const prestamos = sqliteTable('prestamos', {
   id: integer('id').primaryKey({ autoIncrement: true }),
