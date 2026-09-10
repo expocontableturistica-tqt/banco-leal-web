@@ -6,7 +6,7 @@ import { signOut } from 'next-auth/react'
 type Role = 'admin' | 'cajero' | 'operador'
 
 const NAV: { href: string; label: string; icon: string; roles: Role[] }[] = [
-  { href: '/dashboard',     label: 'Dashboard',        icon: '📊', roles: ['admin', 'cajero'] },
+  { href: '/dashboard',     label: 'Inicio',            icon: '📊', roles: ['admin', 'cajero'] },
   { href: '/socios',        label: 'Socios',            icon: '👥', roles: ['admin', 'cajero'] },
   { href: '/empresas',      label: 'Empresas',          icon: '🏢', roles: ['admin', 'cajero'] },
   { href: '/cajero',        label: 'Cajero',            icon: '💵', roles: ['admin', 'cajero'] },

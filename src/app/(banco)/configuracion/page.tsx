@@ -479,12 +479,34 @@ function Seccion({ titulo, subtitulo, usuarios, onToggle, onEliminar, onResetPwd
 function ResetSection({ onMsg }: { onMsg: (m: string) => void }) {
   const [ejecutando, setEjecutando] = useState(false)
   const [confirm, setConfirm] = useState<string | null>(null)
+  const [empresas, setEmpresas] = useState<{ id: number; razonSocial: string }[]>([])
+  const [socios, setSocios] = useState<{ id: number; nombre: string; apellido: string }[]>([])
+  const [selEmpresa, setSelEmpresa] = useState('')
+  const [selSocio, setSelSocio] = useState('')
+
+  useEffect(() => {
+    fetch('/api/empresas').then(r => r.json()).then(d => setEmpresas(Array.isArray(d) ? d : []))
+    fetch('/api/socios').then(r => r.json()).then(d => setSocios(Array.isArray(d) ? d : []))
+  }, [])
 
   async function ejecutar(tipo: string) {
     setEjecutando(true)
     const res = await fetch('/api/reset', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tipo }),
+    })
+    const data = await res.json()
+    onMsg(res.ok ? data.mensaje : 'Error: ' + data.error)
+    setConfirm(null)
+    setEjecutando(false)
+  }
+
+  async function limpiarEntidad(tipo: 'empresa' | 'socio', id: string) {
+    if (!id) return
+    setEjecutando(true)
+    const res = await fetch('/api/limpiar-entidad', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tipo, id: parseInt(id) }),
     })
     const data = await res.json()
     onMsg(res.ok ? data.mensaje : 'Error: ' + data.error)
@@ -513,6 +535,66 @@ function ResetSection({ onMsg }: { onMsg: (m: string) => void }) {
     <div className="space-y-4 max-w-xl">
       <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
         <strong>Zona peligrosa.</strong> Estas acciones son irreversibles. Usá solo antes de la expo o cuando necesites empezar desde cero.
+      </div>
+
+      {/* Limpiar por empresa */}
+      <div className="bg-white rounded-xl border border-orange-200 p-5">
+        <h3 className="font-semibold text-orange-700 mb-1">Limpiar movimientos de una empresa</h3>
+        <p className="text-sm text-gray-600 mb-3">Borra movimientos, préstamos y deja el saldo en $0. La empresa y su cuenta se conservan.</p>
+        {confirm === 'emp' ? (
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-red-600">¿Confirmar? No se puede deshacer.</p>
+            <div className="flex gap-2">
+              <button onClick={() => setConfirm(null)} className="flex-1 border border-gray-300 rounded-lg px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">Cancelar</button>
+              <button onClick={() => limpiarEntidad('empresa', selEmpresa)} disabled={ejecutando}
+                className="flex-1 bg-red-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-red-700 disabled:opacity-50">
+                {ejecutando ? 'Borrando...' : 'Sí, limpiar'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            <select value={selEmpresa} onChange={e => setSelEmpresa(e.target.value)}
+              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+              <option value="">— Seleccioná empresa —</option>
+              {empresas.map(e => <option key={e.id} value={e.id}>{e.razonSocial}</option>)}
+            </select>
+            <button onClick={() => selEmpresa && setConfirm('emp')} disabled={!selEmpresa}
+              className="bg-orange-600 hover:bg-orange-700 disabled:opacity-40 text-white px-4 py-2 rounded-lg text-sm font-medium">
+              Limpiar
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Limpiar por socio */}
+      <div className="bg-white rounded-xl border border-orange-200 p-5">
+        <h3 className="font-semibold text-orange-700 mb-1">Limpiar movimientos de un socio</h3>
+        <p className="text-sm text-gray-600 mb-3">Borra movimientos, transacciones, prestaciones y deja el saldo en $0. El socio y su cuenta se conservan.</p>
+        {confirm === 'soc' ? (
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-red-600">¿Confirmar? No se puede deshacer.</p>
+            <div className="flex gap-2">
+              <button onClick={() => setConfirm(null)} className="flex-1 border border-gray-300 rounded-lg px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">Cancelar</button>
+              <button onClick={() => limpiarEntidad('socio', selSocio)} disabled={ejecutando}
+                className="flex-1 bg-red-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-red-700 disabled:opacity-50">
+                {ejecutando ? 'Borrando...' : 'Sí, limpiar'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            <select value={selSocio} onChange={e => setSelSocio(e.target.value)}
+              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+              <option value="">— Seleccioná socio —</option>
+              {socios.map(s => <option key={s.id} value={s.id}>{s.apellido}, {s.nombre}</option>)}
+            </select>
+            <button onClick={() => selSocio && setConfirm('soc')} disabled={!selSocio}
+              className="bg-orange-600 hover:bg-orange-700 disabled:opacity-40 text-white px-4 py-2 rounded-lg text-sm font-medium">
+              Limpiar
+            </button>
+          </div>
+        )}
       </div>
 
       {OPCIONES.map(op => (
