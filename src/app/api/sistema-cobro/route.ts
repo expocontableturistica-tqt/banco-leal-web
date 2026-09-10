@@ -1,10 +1,25 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { cuentas, empresas, movimientosCuenta } from '@/lib/schema'
-import { eq, and } from 'drizzle-orm'
+import { cuentas, empresas, movimientosCuenta, prestamos } from '@/lib/schema'
+import { eq, and, desc } from 'drizzle-orm'
 
 function checkApiKey(req: Request) {
   return req.headers.get('x-api-key') === process.env.MEDIAPAGO_API_KEY
+}
+
+async function prestamoVigente(empresaId: number | null) {
+  if (!empresaId) return null
+  const [p] = await db.select({
+    monto: prestamos.monto,
+    saldoPendiente: prestamos.saldoPendiente,
+    cuotas: prestamos.cuotas,
+    cuotasPagadas: prestamos.cuotasPagadas,
+    montoCuota: prestamos.montoCuota,
+    estado: prestamos.estado,
+  }).from(prestamos)
+    .where(and(eq(prestamos.empresaId, empresaId), eq(prestamos.estado, 'vigente')))
+    .orderBy(desc(prestamos.createdAt)).limit(1)
+  return p ?? null
 }
 
 // GET /api/sistema-cobro?cbu=XXX  → saldo y datos de cuenta
@@ -28,7 +43,7 @@ export async function GET(req: Request) {
   if (cbu) {
     const [cuenta] = await query.where(eq(cuentas.cbu, cbu)).limit(1)
     if (!cuenta) return NextResponse.json({ error: 'Cuenta no encontrada' }, { status: 404 })
-    return NextResponse.json(cuenta)
+    return NextResponse.json({ ...cuenta, prestamo: await prestamoVigente(cuenta.empresaId) })
   }
 
   if (empresaId) {
@@ -37,7 +52,7 @@ export async function GET(req: Request) {
       eq(cuentas.estado, 'activa')
     )).limit(1)
     if (!cuenta) return NextResponse.json({ error: 'Cuenta no encontrada' }, { status: 404 })
-    return NextResponse.json(cuenta)
+    return NextResponse.json({ ...cuenta, prestamo: await prestamoVigente(cuenta.empresaId) })
   }
 
   // Listar todas las cuentas de empresas
