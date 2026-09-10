@@ -3,7 +3,7 @@ import { auth } from '@/auth'
 import { db } from '@/lib/db'
 import {
   movimientosCuenta, pagosServicios, operacionesCambio,
-  asientosManuales, cuentas, socios, empresas,
+  asientosManuales, cuentas, socios, empresas, transacciones,
 } from '@/lib/schema'
 import { and, desc, eq, gte, lte } from 'drizzle-orm'
 
@@ -50,7 +50,7 @@ export async function GET(req: Request) {
     return f.length ? and(...(f as Parameters<typeof and>)) : undefined
   }
 
-  const [movCuentaRows, serviciosRows, cambioRows, manualesRows] = await Promise.all([
+  const [movCuentaRows, serviciosRows, cambioRows, transaccionesRows, manualesRows] = await Promise.all([
     db.select({
       id: movimientosCuenta.id,
       tipo: movimientosCuenta.tipo,
@@ -77,6 +77,10 @@ export async function GET(req: Request) {
     db.select().from(operacionesCambio)
       .where(makeFilter(operacionesCambio.createdAt))
       .orderBy(desc(operacionesCambio.id)),
+
+    db.select().from(transacciones)
+      .where(makeFilter(transacciones.createdAt))
+      .orderBy(desc(transacciones.id)),
 
     db.select().from(asientosManuales)
       .where(
@@ -145,6 +149,18 @@ export async function GET(req: Request) {
         origen: 'auto',
       })
     }
+  }
+
+  // ── Retiros por QR / MediaPago ───────────────────────────────────────────
+  for (const t of transaccionesRows) {
+    asientos.push({
+      id: `TX-${t.id}`,
+      fecha: t.createdAt,
+      concepto: `Retiro QR MediaPago${t.socioId ? ` — socio #${t.socioId}` : ''}`,
+      debe:  { codigo: '9.9.9', cuenta: 'Cuenta general / varios', monto: t.monto },
+      haber: { codigo: '1.1.1', cuenta: 'Caja y Efectivo',         monto: t.monto },
+      origen: 'auto',
+    })
   }
 
   // ── Asientos manuales ─────────────────────────────────────────────────────
