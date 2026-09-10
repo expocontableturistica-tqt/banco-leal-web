@@ -140,7 +140,9 @@ export async function POST(req: Request) {
       cuotasPagadas: nuevasCuotasPagadas,
     }).where(eq(prestamos.id, prestamoId))
 
-    const [boveda] = await db.select().from(caja).where(isNull(caja.userId)).limit(1)
+    const [boveda] = await db.select().from(caja)
+      .where(and(isNull(caja.userId), eq(caja.estado, 'abierta')))
+      .orderBy(desc(caja.id)).limit(1)
     if (boveda) {
       const nuevoSaldoBoveda = boveda.saldoEfectivo + pagoReal
       await db.update(caja).set({ saldoEfectivo: nuevoSaldoBoveda }).where(eq(caja.id, boveda.id))
@@ -195,7 +197,9 @@ export async function POST(req: Request) {
       cuotasPagadas: nuevasCuotasPagadas,
     }).where(eq(prestamos.id, prestamoId))
 
-    const [boveda] = await db.select().from(caja).where(isNull(caja.userId)).limit(1)
+    const [boveda] = await db.select().from(caja)
+      .where(and(isNull(caja.userId), eq(caja.estado, 'abierta')))
+      .orderBy(desc(caja.id)).limit(1)
     if (boveda) {
       const nuevoSaldoBoveda = boveda.saldoEfectivo + pagoReal
       await db.update(caja).set({ saldoEfectivo: nuevoSaldoBoveda }).where(eq(caja.id, boveda.id))

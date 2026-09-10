@@ -55,9 +55,13 @@ export async function POST(req: Request) {
     if (!cuentaEmpresa)
       return NextResponse.json({ error: 'La empresa no tiene cuenta activa' }, { status: 400 })
 
-    const [boveda] = await db.select().from(caja).where(isNull(caja.userId)).limit(1)
-    if (!boveda || boveda.saldoEfectivo < monto)
-      return NextResponse.json({ error: 'Saldo insuficiente en bóveda' }, { status: 400 })
+    const [boveda] = await db.select().from(caja)
+      .where(and(isNull(caja.userId), eq(caja.estado, 'abierta')))
+      .orderBy(desc(caja.id)).limit(1)
+    if (!boveda)
+      return NextResponse.json({ error: 'La bóveda está cerrada. Abrila desde el menú Caja.' }, { status: 400 })
+    if (boveda.saldoEfectivo < monto)
+      return NextResponse.json({ error: `Saldo insuficiente en bóveda (disponible: $${boveda.saldoEfectivo.toLocaleString('es-AR', { minimumFractionDigits: 2 })})` }, { status: 400 })
 
     const [prestamo] = await db.insert(prestamos).values({
       empresaId,
@@ -132,7 +136,9 @@ export async function POST(req: Request) {
       cuotasPagadas: nuevasCuotasPagadas,
     }).where(eq(prestamos.id, prestamoId))
 
-    const [boveda] = await db.select().from(caja).where(isNull(caja.userId)).limit(1)
+    const [boveda] = await db.select().from(caja)
+      .where(and(isNull(caja.userId), eq(caja.estado, 'abierta')))
+      .orderBy(desc(caja.id)).limit(1)
     if (boveda) {
       const nuevoSaldoBoveda = boveda.saldoEfectivo + pagoReal
       await db.update(caja).set({ saldoEfectivo: nuevoSaldoBoveda }).where(eq(caja.id, boveda.id))
