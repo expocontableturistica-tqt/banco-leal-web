@@ -4,12 +4,7 @@ import { db } from '@/lib/db'
 import { socios } from '@/lib/schema'
 import { eq } from 'drizzle-orm'
 import { randomBytes } from 'crypto'
-
-function generarNumeroSocio(usados: Set<string>): string {
-  let n: string
-  do { n = String(Math.floor(100000 + Math.random() * 900000)) } while (usados.has(n))
-  return n
-}
+import { generarNumeroSocio } from '@/lib/numeros'
 
 export async function GET() {
   const session = await auth()

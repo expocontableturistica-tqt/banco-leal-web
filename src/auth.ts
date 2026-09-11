@@ -1,7 +1,7 @@
 import NextAuth, { type DefaultSession } from 'next-auth'
 import Credentials from 'next-auth/providers/credentials'
 import { compare } from 'bcryptjs'
-import { eq } from 'drizzle-orm'
+import { sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { users } from '@/lib/schema'
 
@@ -21,7 +21,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const [user] = await db
           .select()
           .from(users)
-          .where(eq(users.email, String(credentials.email)))
+          // Sin distinguir mayúsculas: en el celular el teclado suele poner la primera en mayúscula
+          .where(sql`lower(${users.email}) = ${String(credentials.email).trim().toLowerCase()}`)
           .limit(1)
         if (!user || !user.activo) return null
         const ok = await compare(String(credentials.password), user.passwordHash)

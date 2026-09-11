@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { signIn } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -46,6 +47,8 @@ export default function LoginPage() {
               value={email}
               onChange={e => setEmail(e.target.value)}
               required
+              autoCapitalize="none"
+              autoComplete="username"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="usuario@banco.com"
             />
@@ -70,6 +73,15 @@ export default function LoginPage() {
             {loading ? 'Ingresando…' : 'Ingresar'}
           </button>
         </form>
+        <div className="mt-5 pt-4 border-t border-gray-100 space-y-2 text-center text-sm">
+          <p>
+            <Link href="/recuperar" className="text-blue-600 hover:underline">¿Olvidaste tu contraseña?</Link>
+          </p>
+          <p className="text-gray-500">
+            ¿No tenés usuario?{' '}
+            <Link href="/registro" className="text-blue-600 font-medium hover:underline">Registrate</Link>
+          </p>
+        </div>
       </div>
     </div>
   )

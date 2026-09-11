@@ -23,7 +23,8 @@ export default auth((req) => {
   }
 
   // Rutas públicas
-  if (path === '/login' || path.startsWith('/_next') || path.startsWith('/api/auth')) {
+  const PUBLICAS = ['/login', '/registro', '/recuperar', '/api/registro', '/api/recuperar']
+  if (PUBLICAS.includes(path) || path.startsWith('/_next') || path.startsWith('/api/auth')) {
     return NextResponse.next()
   }
 
