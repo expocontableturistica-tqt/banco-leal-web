@@ -4,13 +4,16 @@ import { db } from '@/lib/db'
 import {
   movimientosCuenta, pagosServicios, operacionesCambio,
   asientosManuales, cuentas, socios, empresas, transacciones,
+  prestamos, movimientosCaja,
 } from '@/lib/schema'
-import { and, desc, eq, gte, lte } from 'drizzle-orm'
+import { and, desc, eq, gte, like, lte } from 'drizzle-orm'
+import { leerEntrega } from '@/lib/prestamos'
 
 // ── Plan de cuentas simplificado ─────────────────────────────────────────────
 export const PLAN: Record<string, { nombre: string; tipo: 'activo' | 'pasivo' | 'ingreso' | 'egreso' }> = {
   '1.1.1': { nombre: 'Caja y Efectivo',              tipo: 'activo'  },
   '1.1.2': { nombre: 'Reservas de Divisas',          tipo: 'activo'  },
+  '1.2.1': { nombre: 'Préstamos otorgados',          tipo: 'activo'  },
   '2.1.1': { nombre: 'Depósitos a la vista',         tipo: 'pasivo'  },
   '4.1.1': { nombre: 'Ingresos por servicios',       tipo: 'ingreso' },
   '4.1.2': { nombre: 'Ingresos por cambio',          tipo: 'ingreso' },
@@ -50,7 +53,7 @@ export async function GET(req: Request) {
     return f.length ? and(...(f as Parameters<typeof and>)) : undefined
   }
 
-  const [movCuentaRows, serviciosRows, cambioRows, transaccionesRows, manualesRows] = await Promise.all([
+  const [movCuentaRows, serviciosRows, cambioRows, transaccionesRows, manualesRows, prestamosRows, cobrosEfectivoRows] = await Promise.all([
     db.select({
       id: movimientosCuenta.id,
       tipo: movimientosCuenta.tipo,
@@ -92,16 +95,40 @@ export async function GET(req: Request) {
           : undefined
       )
       .orderBy(desc(asientosManuales.id)),
+
+    db.select({
+      id: prestamos.id,
+      monto: prestamos.monto,
+      entrega: prestamos.entrega,
+      createdAt: prestamos.createdAt,
+      razonSocial: empresas.razonSocial,
+      socioNombre: socios.nombre,
+      socioApellido: socios.apellido,
+    })
+    .from(prestamos)
+    .leftJoin(empresas, eq(prestamos.empresaId, empresas.id))
+    .leftJoin(socios, eq(prestamos.socioId, socios.id))
+    .where(makeFilter(prestamos.createdAt))
+    .orderBy(desc(prestamos.id)),
+
+    db.select().from(movimientosCaja)
+      .where(and(like(movimientosCaja.concepto, 'Cobro en efectivo préstamo #%'), makeFilter(movimientosCaja.createdAt)))
+      .orderBy(desc(movimientosCaja.id)),
   ])
 
   // ── Derivar asientos automáticos ──────────────────────────────────────────
   const asientos: Asiento[] = []
 
   for (const m of movCuentaRows) {
+    // La acreditación de un préstamo se registra abajo, con el préstamo
+    if (m.tipo === 'credito' && m.concepto?.startsWith('Préstamo otorgado')) continue
     const titular = m.razonSocial
       ? m.razonSocial
       : m.socioApellido ? `${m.socioApellido}` : m.cbu
-    const concepto = `${m.tipo === 'credito' ? 'Depósito' : 'Extracción'} — ${titular}${m.concepto ? ` (${m.concepto})` : ''}`
+    // Pago de cuotas debitado de la cuenta: baja el préstamo, no la caja
+    const pagoPrestamo = m.tipo === 'debito' && /préstamo #\d+/i.test(m.concepto ?? '')
+    const tipoMov = m.tipo === 'credito' ? 'Depósito' : pagoPrestamo ? 'Cobro de préstamo' : 'Extracción'
+    const concepto = `${tipoMov} — ${titular}${m.concepto ? ` (${m.concepto})` : ''}`
     asientos.push({
       id: `MC-${m.id}`,
       fecha: m.createdAt,
@@ -111,7 +138,42 @@ export async function GET(req: Request) {
         : { codigo: '2.1.1', cuenta: 'Depósitos a la vista', monto: m.monto },
       haber: m.tipo === 'credito'
         ? { codigo: '2.1.1', cuenta: 'Depósitos a la vista', monto: m.monto }
-        : { codigo: '1.1.1', cuenta: 'Caja y Efectivo',      monto: m.monto },
+        : pagoPrestamo
+          ? { codigo: '1.2.1', cuenta: 'Préstamos otorgados', monto: m.monto }
+          : { codigo: '1.1.1', cuenta: 'Caja y Efectivo',      monto: m.monto },
+      origen: 'auto',
+    })
+  }
+
+  // ── Préstamos: un asiento por forma de entrega ───────────────────────────
+  for (const p of prestamosRows) {
+    const e = leerEntrega(p.entrega, p.monto)
+    const titular = p.razonSocial ?? (p.socioApellido ? `${p.socioApellido}, ${p.socioNombre}` : `#${p.id}`)
+    const formas: [number, string, { codigo: string; cuenta: string }][] = [
+      [e.cuenta,   'depositado en cuenta',       { codigo: '2.1.1', cuenta: 'Depósitos a la vista' }],
+      [e.efectivo, 'entregado en efectivo',      { codigo: '1.1.1', cuenta: 'Caja y Efectivo' }],
+      [e.qr,       'entregado por QR MediaPago', { codigo: '1.1.1', cuenta: 'Caja y Efectivo' }],
+    ]
+    formas.forEach(([monto, forma, haber], i) => {
+      if (monto <= 0) return
+      asientos.push({
+        id: `PR-${p.id}-${i + 1}`,
+        fecha: p.createdAt,
+        concepto: `Préstamo #${p.id} a ${titular} — ${forma}`,
+        debe:  { codigo: '1.2.1', cuenta: 'Préstamos otorgados', monto },
+        haber: { ...haber, monto },
+        origen: 'auto',
+      })
+    })
+  }
+
+  for (const c of cobrosEfectivoRows) {
+    asientos.push({
+      id: `PC-${c.id}`,
+      fecha: c.createdAt,
+      concepto: c.concepto ?? 'Cobro en efectivo de préstamo',
+      debe:  { codigo: '1.1.1', cuenta: 'Caja y Efectivo',     monto: c.monto },
+      haber: { codigo: '1.2.1', cuenta: 'Préstamos otorgados', monto: c.monto },
       origen: 'auto',
     })
   }

@@ -131,7 +131,8 @@ export default function PortalPage() {
     ['inicio', 'Inicio'],
     ['movimientos', 'Movimientos'],
     ['inversiones', 'Inversiones'],
-    ...(isEmpresa ? [['prestamo', 'Préstamo'], ['depositar', 'Depositar']] as [TabKey, string][] : []),
+    ...(isEmpresa || prestamo ? [['prestamo', 'Préstamo']] as [TabKey, string][] : []),
+    ...(isEmpresa ? [['depositar', 'Depositar']] as [TabKey, string][] : []),
   ]
 
   if (loading) {
@@ -196,7 +197,7 @@ export default function PortalPage() {
           )}
 
           {/* Préstamo vigente */}
-          {isEmpresa && prestamo && (
+          {prestamo && (
             <div className="rounded-xl border bg-amber-50 border-amber-200 p-5">
               <div className="flex justify-between items-start">
                 <div>
@@ -213,10 +214,12 @@ export default function PortalPage() {
                   className="text-sm font-medium text-blue-600 hover:text-blue-800">
                   Ver detalle →
                 </button>
-                <button onClick={() => setTab('depositar')}
-                  className="text-sm font-medium text-green-600 hover:text-green-800">
-                  Depositar fondos →
-                </button>
+                {isEmpresa && (
+                  <button onClick={() => setTab('depositar')}
+                    className="text-sm font-medium text-green-600 hover:text-green-800">
+                    Depositar fondos →
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -309,7 +312,7 @@ export default function PortalPage() {
       {tab === 'inversiones' && <Inversiones />}
 
       {/* ── PRÉSTAMO ── */}
-      {tab === 'prestamo' && isEmpresa && (
+      {tab === 'prestamo' && (isEmpresa || prestamo) && (
         <div className="space-y-4">
           {!prestamo ? (
             <div className="bg-green-50 border border-green-200 rounded-xl p-8 text-center">

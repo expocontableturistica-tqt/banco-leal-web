@@ -203,11 +203,15 @@ export const cobrosQr = sqliteTable('cobros_qr', {
   retiradoAt: text('retirado_at'),
 })
 
-// ── Préstamos a empresas ──────────────────────────────────────────────────────
+// ── Préstamos a empresas y socios ─────────────────────────────────────────────
+// Titular: empresaId o socioId. cuentaId es la cuenta del titular (puede no tener).
+// entrega: JSON { cuenta, efectivo, qr, qrPayload? } con cómo se entregó el dinero;
+// los préstamos anteriores no lo tienen y se entregaron completos en la cuenta.
 export const prestamos = sqliteTable('prestamos', {
   id: integer('id').primaryKey({ autoIncrement: true }),
-  empresaId: integer('empresa_id').notNull().references(() => empresas.id),
-  cuentaId: integer('cuenta_id').notNull().references(() => cuentas.id),
+  empresaId: integer('empresa_id').references(() => empresas.id),
+  socioId: integer('socio_id').references(() => socios.id),
+  cuentaId: integer('cuenta_id').references(() => cuentas.id),
   monto: real('monto').notNull(),
   saldoPendiente: real('saldo_pendiente').notNull(),
   cuotas: integer('cuotas').default(1).notNull(),
@@ -215,5 +219,6 @@ export const prestamos = sqliteTable('prestamos', {
   montoCuota: real('monto_cuota'),
   concepto: text('concepto').default('Préstamo inicial'),
   estado: text('estado', { enum: ['vigente', 'pagado', 'moroso'] }).default('vigente').notNull(),
+  entrega: text('entrega'),
   createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
 })

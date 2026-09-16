@@ -2,12 +2,15 @@ import { NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { db } from '@/lib/db'
 import { transacciones, caja, movimientosCaja } from '@/lib/schema'
-import { and, desc, eq, isNull } from 'drizzle-orm'
-import { generarQRDataUrl, verificarPayload } from '@/lib/qr'
-import { randomBytes } from 'crypto'
+import { and, desc, eq, gte, isNull, sql } from 'drizzle-orm'
+import { qrCargaMediaPago, verificarPayload } from '@/lib/qr'
 
 function r2(n: number) {
   return Math.round(n * 100) / 100
+}
+
+function fmt(n: number) {
+  return n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 // POST /api/qr  body: { accion: 'generar' | 'validar', ... }
@@ -20,28 +23,44 @@ export async function POST(req: Request) {
     if (!session || !['admin', 'cajero'].includes(session.user?.role))
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-    const { monto, socioId, tipo = 'transferencia' } = body
-    const tid = randomBytes(8).toString('hex').toUpperCase()
+    const socioId = body.socioId ? Number(body.socioId) : null
+    const monto = r2(Number(body.monto))
+    if (!(monto > 0)) return NextResponse.json({ error: 'Ingresá un monto válido' }, { status: 400 })
 
-    // Caja que va a pagar el retiro: la ventanilla del cajero si la tiene abierta,
-    // si no la bóveda. Queda dentro del payload firmado del QR.
-    let cajaId: number | null = null
+    // Caja que entrega el dinero: la ventanilla del cajero si la tiene abierta, si no la bóveda.
+    let origen: typeof caja.$inferSelect | undefined
     if (session.user?.role === 'cajero' && session.user?.id) {
-      const [v] = await db.select().from(caja)
+      [origen] = await db.select().from(caja)
         .where(and(eq(caja.userId, session.user.id), eq(caja.estado, 'abierta')))
         .orderBy(desc(caja.id)).limit(1)
-      if (v) cajaId = v.id
     }
-    if (cajaId === null) {
-      const [b] = await db.select().from(caja)
+    if (!origen) {
+      [origen] = await db.select().from(caja)
         .where(and(isNull(caja.userId), eq(caja.estado, 'abierta')))
         .orderBy(desc(caja.id)).limit(1)
-      if (b) cajaId = b.id
     }
+    if (!origen)
+      return NextResponse.json({ error: 'No hay caja abierta: abrí tu ventanilla o la bóveda desde Caja.' }, { status: 400 })
 
-    const payload = { v: 1, tipo, monto, socioId: socioId ?? null, cajaId, tid }
-    const dataUrl = await generarQRDataUrl(payload)
-    return NextResponse.json({ ok: true, dataUrl, tid, payload })
+    // MediaPago no le avisa al banco cuando escanea el QR: el dinero sale de la caja al emitirlo.
+    const { tid, payload, dataUrl } = await qrCargaMediaPago(monto)
+    const [cajaAct] = await db.update(caja)
+      .set({ saldoEfectivo: sql`round(${caja.saldoEfectivo} - ${monto}, 2)` })
+      .where(and(eq(caja.id, origen.id), eq(caja.estado, 'abierta'), gte(caja.saldoEfectivo, monto - 0.001)))
+      .returning()
+    if (!cajaAct)
+      return NextResponse.json({ error: `La caja no tiene saldo suficiente (disponible: $${fmt(origen.saldoEfectivo)})` }, { status: 400 })
+
+    await db.insert(transacciones).values({ tid, monto, socioId, descripcion: 'Retiro QR MediaPago' })
+    await db.insert(movimientosCaja).values({
+      cajaId: origen.id,
+      tipo: 'egreso',
+      monto,
+      concepto: `Retiro QR MediaPago${socioId ? ` — socio #${socioId}` : ''}`,
+      saldoPosterior: cajaAct.saldoEfectivo,
+    })
+
+    return NextResponse.json({ ok: true, dataUrl, tid, payload, saldoEfectivo: cajaAct.saldoEfectivo })
   }
 
   if (accion === 'validar') {

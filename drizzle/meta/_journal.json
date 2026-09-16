@@ -50,6 +50,13 @@
       "when": 1789069506481,
       "tag": "0006_thin_selene",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1789472743037,
+      "tag": "0007_clean_scarlet_spider",
+      "breakpoints": true
     }
   ]
 }

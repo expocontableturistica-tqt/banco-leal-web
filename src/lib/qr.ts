@@ -28,6 +28,40 @@ export async function generarQRDataUrl(payload: object): Promise<string> {
   return QRCode.toDataURL(token, { width: 300, margin: 2 })
 }
 
+// ── QR que lee la app MediaPago ─────────────────────────────────────────────
+// La app espera JSON plano (no el token de arriba) y valida
+// SHA256("clave|…").slice(0, 16) en hexadecimal minúscula. Vence a las 24 h.
+// La app no le avisa al banco cuando lo escanea.
+
+function firmaMediaPago(mensaje: string): string {
+  return createHash('sha256').update(`${SECRET}|${mensaje}`).digest('hex').slice(0, 16)
+}
+
+export function qrDesdePayload(payload: object): Promise<string> {
+  return QRCode.toDataURL(JSON.stringify(payload), { errorCorrectionLevel: 'M', width: 300, margin: 2 })
+}
+
+/** Carga dinero en la billetera MediaPago de quien lo escanea. */
+export async function qrCargaMediaPago(monto: number) {
+  const v = 1
+  const tid = randomBytes(8).toString('hex')
+  const ts = Math.floor(Date.now() / 1000)
+  const payload = { v, monto, tid, ts, sig: firmaMediaPago(`${v}|${monto}|${tid}|${ts}`) }
+  return { tid, payload, dataUrl: await qrDesdePayload(payload) }
+}
+
+/** Préstamo personal: MediaPago lo muestra como préstamo y lo acredita en la billetera. */
+export async function qrPrestamoMediaPago(monto: number, cuotas: number) {
+  const tipo = 'banco_prestamo'
+  const tid = randomBytes(8).toString('hex')
+  const ts = Math.floor(Date.now() / 1000)
+  const payload = {
+    v: 2, tipo, monto, cuotas, tasaMensual: 0, tid, ts,
+    sig: firmaMediaPago(`prestacion|${tipo}|${tid}|${ts}`),
+  }
+  return { tid, payload, dataUrl: await qrDesdePayload(payload) }
+}
+
 // ── Códigos de transferencia BF-XXXX ────────────────────────────────────────
 
 const ABC = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'

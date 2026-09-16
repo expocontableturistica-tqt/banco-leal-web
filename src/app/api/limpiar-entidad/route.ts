@@ -35,11 +35,12 @@ export async function POST(req: Request) {
       await db.delete(codigosExternos).where(inArray(codigosExternos.cuentaId, cuentaIds))
       await db.update(cuentas).set({ saldo: 0 }).where(inArray(cuentas.id, cuentaIds))
     }
+    await db.delete(prestamos).where(eq(prestamos.socioId, id))
     await db.delete(transacciones).where(eq(transacciones.socioId, id))
     await db.delete(prestaciones).where(eq(prestaciones.socioId, id))
     await db.delete(operacionesCambio).where(eq(operacionesCambio.socioId, id))
     await db.delete(pagosServicios).where(eq(pagosServicios.socioId, id))
-    return NextResponse.json({ ok: true, mensaje: 'Movimientos y transacciones del socio borrados. La cuenta y el socio se conservan.' })
+    return NextResponse.json({ ok: true, mensaje: 'Movimientos, préstamos y transacciones del socio borrados. La cuenta y el socio se conservan.' })
   }
 
   return NextResponse.json({ error: 'Tipo inválido' }, { status: 400 })

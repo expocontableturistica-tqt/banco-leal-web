@@ -5,10 +5,14 @@ import { useEffect, useState } from 'react'
 interface Socio { id: number; nombre: string; apellido: string; numeroSocio: string }
 interface Empresa { id: number; razonSocial: string; nombreFantasia: string; numeroEmpresa: string }
 interface Cuenta { id: number; empresaId: number | null; socioId: number | null; tipo: string; alias: string; saldo: number; estado: string }
-interface CajaInfo { estado: 'abierta' | 'cerrada'; saldoEfectivo: number }
+interface CajaInfo { estado: 'abierta' | 'cerrada'; saldoEfectivo: number; userId: string | null; numeroCaja: number | null }
 
 type Destinatario = 'socio' | 'empresa'
-type Metodo = 'efectivo' | 'cuenta' | 'qr'
+type Metodo = 'extraccion' | 'efectivo' | 'cuenta' | 'qr'
+
+function fmt(n: number) {
+  return n.toLocaleString('es-AR', { minimumFractionDigits: 2 })
+}
 
 export default function CajeroPage() {
   const [socios, setSocios] = useState<Socio[]>([])
@@ -20,7 +24,7 @@ export default function CajeroPage() {
   const [destinatario, setDestinatario] = useState<Destinatario>('socio')
   const [socioId, setSocioId] = useState('')
   const [empresaId, setEmpresaId] = useState('')
-  const [metodo, setMetodo] = useState<Metodo>('efectivo')
+  const [metodo, setMetodo] = useState<Metodo>('extraccion')
   const [cuentaId, setCuentaId] = useState('')
   const [monto, setMonto] = useState('')
   const [concepto, setConcepto] = useState('')
@@ -39,7 +43,8 @@ export default function CajeroPage() {
     setSocios(Array.isArray(s) ? s : [])
     setEmpresas(Array.isArray(e) ? e : [])
     setCuentas(Array.isArray(c) ? c : [])
-    setCajaInfo(caja)
+    // Cajero: su ventanilla. Admin: su ventanilla si abrió una, si no la bóveda.
+    setCajaInfo(caja?.caja ?? caja?.miCaja ?? (caja?.boveda?.id ? caja.boveda : null))
     setLoading(false)
   }
 
@@ -51,15 +56,26 @@ export default function CajeroPage() {
   const cuentasSocio = cuentas.filter(c =>
     c.socioId === parseInt(socioId) && c.estado === 'activa'
   )
+  const cuentasTitular = destinatario === 'empresa' ? cuentasEmpresa : cuentasSocio
+  const cuentaSel = cuentasTitular.find(c => c.id === parseInt(cuentaId))
+  const titularElegido = destinatario === 'socio' ? !!socioId : !!empresaId
+  const cajaAbierta = cajaInfo?.estado === 'abierta'
+  const nombreCaja = cajaInfo && !cajaInfo.userId ? 'Bóveda' : `Caja${cajaInfo?.numeroCaja ? ` ${cajaInfo.numeroCaja}` : ''}`
 
   // Resetear metodo/cuenta al cambiar destinatario
   function cambiarDestinatario(d: Destinatario) {
     setDestinatario(d)
-    setMetodo('efectivo')
+    setMetodo('extraccion')
     setCuentaId('')
     setSocioId('')
     setEmpresaId('')
     setResultado(null)
+  }
+
+  function nombreTitular() {
+    return destinatario === 'socio'
+      ? socios.find(s => s.id === parseInt(socioId))?.apellido
+      : empresas.find(emp => emp.id === parseInt(empresaId))?.razonSocial
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -73,14 +89,30 @@ export default function CajeroPage() {
       setEnviando(false)
       return
     }
+    if ((metodo === 'extraccion' || metodo === 'efectivo') && !cajaAbierta) {
+      setResultado({ ok: false, mensaje: 'La caja está cerrada. Abrila antes de entregar efectivo.' })
+      setEnviando(false)
+      return
+    }
 
     try {
-      if (metodo === 'efectivo') {
-        if (cajaInfo?.estado !== 'abierta') {
-          setResultado({ ok: false, mensaje: 'La caja está cerrada. Abrila antes de entregar efectivo.' })
-          setEnviando(false)
-          return
+      if (metodo === 'extraccion') {
+        const res = await fetch('/api/caja', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accion: 'extraccion', cuentaId: parseInt(cuentaId), monto: m, concepto }),
+        })
+        const data = await res.json()
+        if (res.ok) {
+          setCajaInfo(prev => prev ? { ...prev, saldoEfectivo: data.saldoEfectivo } : null)
+          setCuentas(prev => prev.map(c => c.id === parseInt(cuentaId) ? { ...c, saldo: data.saldoCuenta } : c))
+          setResultado({ ok: true, mensaje: `Extracción registrada: entregá $${fmt(m)} en efectivo. Saldo de la cuenta: $${fmt(data.saldoCuenta)} · Efectivo en caja: $${fmt(data.saldoEfectivo)}` })
+        } else {
+          setResultado({ ok: false, mensaje: data.error || 'Error al registrar la extracción' })
         }
+      }
+
+      if (metodo === 'efectivo') {
         const res = await fetch('/api/caja', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -88,15 +120,13 @@ export default function CajeroPage() {
             accion: 'movimiento',
             tipo: 'egreso',
             monto: m,
-            concepto: concepto || `Entrega efectivo a ${destinatario === 'socio'
-              ? socios.find(s => s.id === parseInt(socioId))?.apellido
-              : empresas.find(emp => emp.id === parseInt(empresaId))?.razonSocial}`,
+            concepto: concepto || `Entrega efectivo a ${nombreTitular()}`,
           }),
         })
         const data = await res.json()
         if (res.ok) {
           setCajaInfo(prev => prev ? { ...prev, saldoEfectivo: data.saldoEfectivo } : null)
-          setResultado({ ok: true, mensaje: `Efectivo entregado. Nuevo saldo de caja: $${data.saldoEfectivo.toLocaleString('es-AR', { minimumFractionDigits: 2 })}` })
+          setResultado({ ok: true, mensaje: `Efectivo entregado. Nuevo saldo de caja: $${fmt(data.saldoEfectivo)}` })
         } else {
           setResultado({ ok: false, mensaje: data.error || 'Error al registrar egreso' })
         }
@@ -115,7 +145,8 @@ export default function CajeroPage() {
         })
         const data = await res.json()
         if (res.ok) {
-          setResultado({ ok: true, mensaje: `Cuenta acreditada. Nuevo saldo: $${data.saldo.toLocaleString('es-AR', { minimumFractionDigits: 2 })}` })
+          setCuentas(prev => prev.map(c => c.id === parseInt(cuentaId) ? { ...c, saldo: data.saldo } : c))
+          setResultado({ ok: true, mensaje: `Cuenta acreditada. Nuevo saldo: $${fmt(data.saldo)}` })
         } else {
           setResultado({ ok: false, mensaje: data.error || 'Error al acreditar cuenta' })
         }
@@ -129,12 +160,12 @@ export default function CajeroPage() {
             accion: 'generar',
             monto: m,
             socioId: parseInt(socioId),
-            tipo: 'transferencia',
           }),
         })
         const data = await res.json()
         if (res.ok) {
-          setResultado({ ok: true, mensaje: `QR generado por $${m.toLocaleString('es-AR', { minimumFractionDigits: 2 })}. Mostralo al socio para escanearlo con MediaPago.`, qrDataUrl: data.dataUrl })
+          setCajaInfo(prev => prev ? { ...prev, saldoEfectivo: data.saldoEfectivo } : null)
+          setResultado({ ok: true, mensaje: `QR generado por $${fmt(m)} (ya descontado de la caja: quedan $${fmt(data.saldoEfectivo)}). Mostralo al socio para escanearlo con MediaPago; vence en 24 horas.`, qrDataUrl: data.dataUrl })
         } else {
           setResultado({ ok: false, mensaje: data.error || 'Error al generar QR' })
         }
@@ -154,17 +185,27 @@ export default function CajeroPage() {
 
   if (loading) return <p className="text-gray-500 text-sm">Cargando...</p>
 
+  const opcionMetodo = (valor: Metodo, texto: React.ReactNode, deshabilitado = false) => (
+    <label className={`flex items-center gap-2 border rounded-lg px-3 py-2.5 cursor-pointer text-sm transition-colors ${
+      metodo === valor ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+    } ${deshabilitado ? 'opacity-40 cursor-not-allowed' : ''}`}>
+      <input type="radio" className="hidden" disabled={deshabilitado} checked={metodo === valor}
+        onChange={() => { setMetodo(valor); if (valor === 'qr' || valor === 'efectivo') setCuentaId('') }} />
+      {texto}
+    </label>
+  )
+
   return (
     <div className="max-w-xl">
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900 mb-1">Cajero</h1>
         <div className="flex items-center gap-2">
-          <span className={`inline-block w-2 h-2 rounded-full ${cajaInfo?.estado === 'abierta' ? 'bg-green-500' : 'bg-red-400'}`} />
+          <span className={`inline-block w-2 h-2 rounded-full ${cajaAbierta ? 'bg-green-500' : 'bg-red-400'}`} />
           <p className="text-sm text-gray-500">
-            Caja {cajaInfo?.estado === 'abierta' ? 'abierta' : 'cerrada'}
-            {cajaInfo?.estado === 'abierta' && (
-              <> · Saldo: <span className="font-medium text-gray-700">${cajaInfo.saldoEfectivo.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</span></>
+            {nombreCaja} {cajaAbierta ? 'abierta' : 'cerrada'}
+            {cajaAbierta && cajaInfo && (
+              <> · Efectivo: <span className="font-medium text-gray-700">${fmt(cajaInfo.saldoEfectivo)}</span></>
             )}
           </p>
         </div>
@@ -173,7 +214,7 @@ export default function CajeroPage() {
       {resultado ? (
         /* Pantalla de resultado */
         <div className={`rounded-xl border p-6 text-center ${resultado.ok ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
-          <p className={`text-2xl mb-3 ${resultado.ok ? '' : ''}`}>{resultado.ok ? '✅' : '❌'}</p>
+          <p className="text-2xl mb-3">{resultado.ok ? '✅' : '❌'}</p>
           <p className={`text-sm font-medium mb-4 ${resultado.ok ? 'text-green-800' : 'text-red-700'}`}>{resultado.mensaje}</p>
           {resultado.qrDataUrl && (
             <div className="flex justify-center mb-4">
@@ -192,7 +233,7 @@ export default function CajeroPage() {
         <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
           {/* Paso 1: destinatario */}
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">1. Destinatario</p>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">1. Titular</p>
             <div className="grid grid-cols-2 gap-2">
               {(['socio', 'empresa'] as const).map(d => (
                 <label key={d} className={`flex items-center gap-2 border rounded-lg px-3 py-2.5 cursor-pointer text-sm transition-colors ${
@@ -240,51 +281,26 @@ export default function CajeroPage() {
             )}
           </div>
 
-          {/* Paso 2: método */}
+          {/* Paso 2: operación */}
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">2. Método</p>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">2. Operación</p>
             <div className="grid gap-2">
-              <label className={`flex items-center gap-2 border rounded-lg px-3 py-2.5 cursor-pointer text-sm transition-colors ${
-                metodo === 'efectivo' ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-              }`}>
-                <input type="radio" className="hidden" checked={metodo === 'efectivo'} onChange={() => { setMetodo('efectivo'); setCuentaId('') }} />
-                💵 Efectivo {cajaInfo?.estado !== 'abierta' && <span className="text-xs text-red-400 ml-1">(caja cerrada)</span>}
-              </label>
-
-              {destinatario === 'socio' && (
-                <label className={`flex items-center gap-2 border rounded-lg px-3 py-2.5 cursor-pointer text-sm transition-colors ${
-                  metodo === 'qr' ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-                }`}>
-                  <input type="radio" className="hidden" checked={metodo === 'qr'} onChange={() => { setMetodo('qr'); setCuentaId('') }} />
-                  📱 QR MediaPago
-                </label>
-              )}
-
-              {destinatario === 'empresa' && (
-                <label className={`flex items-center gap-2 border rounded-lg px-3 py-2.5 cursor-pointer text-sm transition-colors ${
-                  metodo === 'cuenta' ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-                } ${!empresaId ? 'opacity-40 cursor-not-allowed' : ''}`}>
-                  <input type="radio" className="hidden" disabled={!empresaId} checked={metodo === 'cuenta'} onChange={() => setMetodo('cuenta')} />
-                  🏦 Acreditar cuenta bancaria
-                </label>
-              )}
-
-              {destinatario === 'socio' && socioId && (
-                <label className={`flex items-center gap-2 border rounded-lg px-3 py-2.5 cursor-pointer text-sm transition-colors ${
-                  metodo === 'cuenta' ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-                }`}>
-                  <input type="radio" className="hidden" checked={metodo === 'cuenta'} onChange={() => setMetodo('cuenta')} />
-                  🏦 Acreditar cuenta bancaria
-                </label>
-              )}
+              {opcionMetodo('extraccion', <>💸 Extracción: efectivo que se descuenta de su cuenta {!cajaAbierta && <span className="text-xs text-red-400 ml-1">(caja cerrada)</span>}</>)}
+              {opcionMetodo('efectivo', <>💵 Entrega de efectivo del banco <span className="text-xs text-gray-400">(no descuenta de ninguna cuenta)</span> {!cajaAbierta && <span className="text-xs text-red-400 ml-1">(caja cerrada)</span>}</>)}
+              {opcionMetodo('cuenta', <>🏦 Acreditar en su cuenta bancaria</>, !titularElegido)}
+              {destinatario === 'socio' && opcionMetodo('qr', <>📱 QR MediaPago <span className="text-xs text-gray-400">(sale de la caja)</span></>)}
             </div>
           </div>
 
-          {/* Select cuenta si método = cuenta */}
-          {metodo === 'cuenta' && (
+          {/* Select cuenta si la operación usa la cuenta */}
+          {(metodo === 'cuenta' || metodo === 'extraccion') && (
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Cuenta destino *</label>
-              {(destinatario === 'empresa' ? cuentasEmpresa : cuentasSocio).length === 0 ? (
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                {metodo === 'extraccion' ? 'Cuenta de la que retira *' : 'Cuenta destino *'}
+              </label>
+              {!titularElegido ? (
+                <p className="text-xs text-gray-400">Elegí primero el {destinatario}.</p>
+              ) : cuentasTitular.length === 0 ? (
                 <p className="text-xs text-red-500">No hay cuentas activas para este {destinatario}.</p>
               ) : (
                 <select
@@ -294,12 +310,18 @@ export default function CajeroPage() {
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Seleccionar cuenta...</option>
-                  {(destinatario === 'empresa' ? cuentasEmpresa : cuentasSocio).map(c => (
+                  {cuentasTitular.map(c => (
                     <option key={c.id} value={c.id}>
-                      {c.tipo} — {c.alias} · Saldo: ${c.saldo.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                      {c.tipo} — {c.alias} · Saldo: ${fmt(c.saldo)}
                     </option>
                   ))}
                 </select>
+              )}
+              {metodo === 'extraccion' && cuentaSel && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Puede retirar hasta ${fmt(Math.min(cuentaSel.saldo, cajaInfo?.saldoEfectivo ?? 0))}
+                  {cajaInfo && cuentaSel.saldo > cajaInfo.saldoEfectivo ? ' (límite: efectivo en caja)' : ''}.
+                </p>
               )}
             </div>
           )}
@@ -328,7 +350,7 @@ export default function CajeroPage() {
                   value={concepto}
                   onChange={e => setConcepto(e.target.value)}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Ej: Entrega de capital inicial"
+                  placeholder={metodo === 'extraccion' ? 'Ej: Retiro para cambio' : 'Ej: Entrega de capital inicial'}
                 />
               </div>
             </div>

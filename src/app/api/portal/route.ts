@@ -55,14 +55,37 @@ export async function GET() {
         .orderBy(desc(movimientosCuenta.createdAt))
         .limit(20)
     }
+
+    const [p] = await db.select().from(prestamos)
+      .where(and(eq(prestamos.socioId, entityId), eq(prestamos.estado, 'vigente')))
+      .orderBy(desc(prestamos.createdAt))
+      .limit(1)
+    prestamo = p ?? null
   }
 
   return NextResponse.json({ entidad, cuenta, movimientos, prestamo })
 }
 
+// Préstamo del usuario logueado (empresa o socio) y la cuenta de la que se paga:
+// la asociada al préstamo o, si no tiene, la cuenta activa del titular.
+async function prestamoPropio(role: string, entityId: number, prestamoId: number) {
+  const esSocio = role === 'socio'
+  const [prestamo] = await db.select().from(prestamos)
+    .where(and(eq(prestamos.id, prestamoId), eq(esSocio ? prestamos.socioId : prestamos.empresaId, entityId)))
+    .limit(1)
+  if (!prestamo) return { prestamo: null, cuenta: null }
+  const [cuenta] = prestamo.cuentaId
+    ? await db.select().from(cuentas).where(eq(cuentas.id, prestamo.cuentaId)).limit(1)
+    : await db.select().from(cuentas)
+        .where(and(eq(esSocio ? cuentas.socioId : cuentas.empresaId, entityId), eq(cuentas.estado, 'activa')))
+        .limit(1)
+  return { prestamo, cuenta: cuenta ?? null }
+}
+
 export async function POST(req: Request) {
   const session = await auth()
-  if (!session || session.user?.role !== 'empresa')
+  const role = session?.user?.role ?? ''
+  if (!session || !['empresa', 'socio'].includes(role))
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const body = await req.json()
@@ -71,6 +94,7 @@ export async function POST(req: Request) {
 
   // ── Depositar fondos ────────────────────────────────────────────────────────
   if (action === 'depositar') {
+    if (role !== 'empresa') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     const { monto, tipo, concepto } = body
     const TIPOS_VALIDOS = ['efectivo', 'cheque', 'transferencia', 'mediapago']
     if (!monto || monto <= 0 || !tipo || !TIPOS_VALIDOS.includes(tipo))
@@ -108,17 +132,16 @@ export async function POST(req: Request) {
     if (!prestamoId)
       return NextResponse.json({ error: 'Datos inválidos' }, { status: 400 })
 
-    const [prestamo] = await db.select().from(prestamos)
-      .where(and(eq(prestamos.id, prestamoId), eq(prestamos.empresaId, entityId)))
-      .limit(1)
+    const { prestamo, cuenta } = await prestamoPropio(role, entityId, prestamoId)
     if (!prestamo || prestamo.estado === 'pagado')
       return NextResponse.json({ error: 'Préstamo no encontrado o ya pagado' }, { status: 400 })
 
     const montoCuota = prestamo.montoCuota ?? (prestamo.monto / prestamo.cuotas)
     const pagoReal = Math.min(montoCuota, prestamo.saldoPendiente)
 
-    const [cuenta] = await db.select().from(cuentas).where(eq(cuentas.id, prestamo.cuentaId)).limit(1)
-    if (!cuenta || cuenta.saldo < pagoReal)
+    if (!cuenta)
+      return NextResponse.json({ error: 'No tenés una cuenta para debitar la cuota: pagala en el banco' }, { status: 400 })
+    if (cuenta.saldo < pagoReal)
       return NextResponse.json({ error: 'Saldo insuficiente en su cuenta' }, { status: 400 })
 
     const nuevoSaldo = cuenta.saldo - pagoReal
@@ -148,7 +171,7 @@ export async function POST(req: Request) {
       await db.update(caja).set({ saldoEfectivo: nuevoSaldoBoveda }).where(eq(caja.id, boveda.id))
       await db.insert(movimientosCaja).values({
         cajaId: boveda.id, tipo: 'ingreso', monto: pagoReal,
-        concepto: `Cuota préstamo empresa (portal)`,
+        concepto: `Cuota préstamo #${prestamoId} (homebanking)`,
         saldoPosterior: nuevoSaldoBoveda,
       })
     }
@@ -162,16 +185,15 @@ export async function POST(req: Request) {
     if (!prestamoId || !monto || monto <= 0)
       return NextResponse.json({ error: 'Datos inválidos' }, { status: 400 })
 
-    const [prestamo] = await db.select().from(prestamos)
-      .where(and(eq(prestamos.id, prestamoId), eq(prestamos.empresaId, entityId)))
-      .limit(1)
+    const { prestamo, cuenta } = await prestamoPropio(role, entityId, prestamoId)
     if (!prestamo || prestamo.estado === 'pagado')
       return NextResponse.json({ error: 'Préstamo no encontrado o ya pagado' }, { status: 400 })
 
-    const [cuenta] = await db.select().from(cuentas).where(eq(cuentas.id, prestamo.cuentaId)).limit(1)
     const pagoReal = Math.min(monto, prestamo.saldoPendiente)
 
-    if (!cuenta || cuenta.saldo < pagoReal)
+    if (!cuenta)
+      return NextResponse.json({ error: 'No tenés una cuenta para debitar la cuota: pagala en el banco' }, { status: 400 })
+    if (cuenta.saldo < pagoReal)
       return NextResponse.json({ error: 'Saldo insuficiente en su cuenta' }, { status: 400 })
 
     const nuevoSaldo = cuenta.saldo - pagoReal
@@ -205,7 +227,7 @@ export async function POST(req: Request) {
       await db.update(caja).set({ saldoEfectivo: nuevoSaldoBoveda }).where(eq(caja.id, boveda.id))
       await db.insert(movimientosCaja).values({
         cajaId: boveda.id, tipo: 'ingreso', monto: pagoReal,
-        concepto: `Pago préstamo empresa (portal)`,
+        concepto: `Pago préstamo #${prestamoId} (homebanking)`,
         saldoPosterior: nuevoSaldoBoveda,
       })
     }

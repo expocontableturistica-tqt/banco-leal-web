@@ -47,9 +47,17 @@ const stmts = readFileSync(join(root, 'drizzle', basename(archivo)), 'utf8')
 
 const client = createClient({ url, authToken })
 try {
-  for (const stmt of stmts) {
-    await client.execute(stmt)
-    console.log('OK :', stmt.replace(/\s+/g, ' ').slice(0, 70), '…')
+  if (stmts.some(s => s.includes('__new_'))) {
+    // Reconstruye una tabla (copiar → borrar → renombrar): todo en una sola
+    // transacción para no quedar a mitad de camino. Los PRAGMA no aplican dentro.
+    const lote = stmts.filter(s => !/^PRAGMA /i.test(s))
+    await client.batch(lote, 'write')
+    for (const stmt of lote) console.log('OK :', stmt.replace(/\s+/g, ' ').slice(0, 70), '…')
+  } else {
+    for (const stmt of stmts) {
+      await client.execute(stmt)
+      console.log('OK :', stmt.replace(/\s+/g, ' ').slice(0, 70), '…')
+    }
   }
   console.log('\n✓ Migración aplicada:', basename(archivo))
 } catch (e) {

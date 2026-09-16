@@ -38,6 +38,7 @@ export async function GET(req: Request) {
     tipo: cuentas.tipo,
     empresaId: cuentas.empresaId,
     razonSocial: empresas.razonSocial,
+    numeroEmpresa: empresas.numeroEmpresa,
   }).from(cuentas).leftJoin(empresas, eq(cuentas.empresaId, empresas.id))
 
   if (cbu) {

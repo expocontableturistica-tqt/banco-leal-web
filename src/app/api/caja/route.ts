@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { db } from '@/lib/db'
-import { caja, movimientosCaja } from '@/lib/schema'
-import { and, desc, eq, isNull } from 'drizzle-orm'
+import { caja, cuentas, empresas, movimientosCaja, movimientosCuenta, socios } from '@/lib/schema'
+import { and, desc, eq, gte, isNull, sql } from 'drizzle-orm'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+function fmt(n: number) {
+  return n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
 
 async function getCajaDeUsuario(userId: string) {
   const rows = await db.select().from(caja)
@@ -18,6 +22,16 @@ async function getBoveda() {
     .where(isNull(caja.userId))
     .orderBy(desc(caja.id)).limit(1)
   return rows[0] ?? { id: null, saldoEfectivo: 0, estado: 'cerrada' as const, userId: null, numeroCaja: null, fechaApertura: null, fechaCierre: null }
+}
+
+// Caja con la que se atiende: la ventanilla propia; el admin sin ventanilla usa la bóveda.
+async function getCajaOperativa(role: string | undefined, userId: string) {
+  const propia = await getCajaDeUsuario(userId)
+  if (propia || role !== 'admin') return propia
+  const [boveda] = await db.select().from(caja)
+    .where(and(isNull(caja.userId), eq(caja.estado, 'abierta')))
+    .orderBy(desc(caja.id)).limit(1)
+  return boveda ?? null
 }
 
 async function registrarMovimiento(cajaId: number, tipo: string, monto: number, concepto: string, saldoPosterior: number) {
@@ -50,7 +64,8 @@ export async function GET(req: Request) {
         .orderBy(desc(movimientosCaja.id)).limit(100)
     }
 
-    return NextResponse.json({ boveda, ventanillas: todasAbiertas, totalGeneral, movimientos })
+    const miCaja = userId ? await getCajaDeUsuario(userId) : null
+    return NextResponse.json({ boveda, ventanillas: todasAbiertas, totalGeneral, movimientos, miCaja })
   }
 
   // Cajero ve solo su propia caja
@@ -177,17 +192,74 @@ export async function POST(req: Request) {
 
   // ── Movimiento en ventanilla ──────────────────────────────────────────────
   if (accion === 'movimiento') {
-    const miCaja = await getCajaDeUsuario(userId)
+    const miCaja = await getCajaOperativa(role, userId)
     if (!miCaja) return NextResponse.json({ error: 'No tenés una ventanilla abierta' }, { status: 400 })
 
     const tipoFinal: 'ingreso' | 'egreso' = tipo === 'egreso' ? 'egreso' : 'ingreso'
     const m = Math.abs(monto)
+    if (tipoFinal === 'egreso' && miCaja.saldoEfectivo + 0.001 < m)
+      return NextResponse.json({ error: `No hay efectivo suficiente en la caja (disponible: $${fmt(miCaja.saldoEfectivo)})` }, { status: 400 })
     const nuevoSaldo = tipoFinal === 'ingreso'
       ? Math.round((miCaja.saldoEfectivo + m) * 100) / 100
       : Math.max(0, Math.round((miCaja.saldoEfectivo - m) * 100) / 100)
     await db.update(caja).set({ saldoEfectivo: nuevoSaldo }).where(eq(caja.id, miCaja.id))
     await registrarMovimiento(miCaja.id, tipoFinal, m, concepto ?? tipoFinal, nuevoSaldo)
     return NextResponse.json({ saldoEfectivo: nuevoSaldo, estado: 'abierta' })
+  }
+
+  // ── Extracción: el titular retira efectivo y se descuenta de su cuenta ────
+  if (accion === 'extraccion') {
+    const cuentaId = Number(body.cuentaId)
+    const m = Math.round(Number(monto) * 100) / 100
+    if (!cuentaId || !(m > 0))
+      return NextResponse.json({ error: 'Elegí la cuenta e ingresá un monto válido' }, { status: 400 })
+
+    const miCaja = await getCajaOperativa(role, userId)
+    if (!miCaja)
+      return NextResponse.json({ error: role === 'admin' ? 'Abrí la bóveda o una ventanilla para entregar efectivo' : 'No tenés una ventanilla abierta' }, { status: 400 })
+
+    const [cuenta] = await db.select({
+      id: cuentas.id, cbu: cuentas.cbu, saldo: cuentas.saldo, estado: cuentas.estado,
+      razonSocial: empresas.razonSocial, nombre: socios.nombre, apellido: socios.apellido,
+    }).from(cuentas)
+      .leftJoin(empresas, eq(cuentas.empresaId, empresas.id))
+      .leftJoin(socios, eq(cuentas.socioId, socios.id))
+      .where(eq(cuentas.id, cuentaId)).limit(1)
+    if (!cuenta) return NextResponse.json({ error: 'Cuenta no encontrada' }, { status: 404 })
+    if (cuenta.estado !== 'activa') return NextResponse.json({ error: 'La cuenta está inactiva' }, { status: 400 })
+    if (cuenta.saldo + 0.001 < m)
+      return NextResponse.json({ error: `Saldo insuficiente en la cuenta (disponible: $${fmt(cuenta.saldo)})` }, { status: 400 })
+    if (miCaja.saldoEfectivo + 0.001 < m)
+      return NextResponse.json({ error: `No hay efectivo suficiente en la caja (disponible: $${fmt(miCaja.saldoEfectivo)})` }, { status: 400 })
+
+    // Cada descuento controla el saldo en la misma operación (varias cajas atienden a la vez).
+    // Si la caja ya no alcanza, se devuelve lo descontado de la cuenta.
+    const [cuentaAct] = await db.update(cuentas)
+      .set({ saldo: sql`round(${cuentas.saldo} - ${m}, 2)` })
+      .where(and(eq(cuentas.id, cuentaId), eq(cuentas.estado, 'activa'), gte(cuentas.saldo, m - 0.001)))
+      .returning()
+    if (!cuentaAct) return NextResponse.json({ error: 'Saldo insuficiente en la cuenta' }, { status: 400 })
+    const [cajaAct] = await db.update(caja)
+      .set({ saldoEfectivo: sql`round(${caja.saldoEfectivo} - ${m}, 2)` })
+      .where(and(eq(caja.id, miCaja.id), eq(caja.estado, 'abierta'), gte(caja.saldoEfectivo, m - 0.001)))
+      .returning()
+    if (!cajaAct) {
+      await db.update(cuentas).set({ saldo: sql`round(${cuentas.saldo} + ${m}, 2)` }).where(eq(cuentas.id, cuentaId))
+      return NextResponse.json({ error: 'No hay efectivo suficiente en la caja' }, { status: 400 })
+    }
+
+    const titular = cuenta.razonSocial ?? (cuenta.apellido ? `${cuenta.apellido}, ${cuenta.nombre}` : cuenta.cbu)
+    const lugar = miCaja.userId ? `ventanilla ${miCaja.numeroCaja ?? ''}`.trim() : 'bóveda'
+    await db.insert(movimientosCuenta).values({
+      cuentaId,
+      tipo: 'debito',
+      monto: m,
+      concepto: `Extracción en efectivo (${lugar})${concepto ? ` — ${concepto}` : ''}`,
+      saldoPosterior: cuentaAct.saldo,
+    })
+    await registrarMovimiento(miCaja.id, 'egreso', m, `Extracción de cuenta — ${titular} (CBU …${cuenta.cbu.slice(-4)})`, cajaAct.saldoEfectivo)
+
+    return NextResponse.json({ ok: true, saldoCuenta: cuentaAct.saldo, saldoEfectivo: cajaAct.saldoEfectivo })
   }
 
   return NextResponse.json({ error: 'Acción desconocida' }, { status: 400 })
