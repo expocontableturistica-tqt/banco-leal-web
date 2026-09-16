@@ -42,6 +42,10 @@ export default auth((req) => {
     if (path.startsWith('/portal'))
       return NextResponse.redirect(new URL('/dashboard', req.url))
 
+    // Cada API controla qué rol puede usarla; acá solo se filtran las páginas.
+    // Sin esto, al cajero y al operador se les redirigían también sus llamadas.
+    if (path.startsWith('/api/')) return NextResponse.next()
+
     // Operador: solo prestaciones + historial
     if (role === 'operador' && !puedeAcceder(path, RUTAS_OPERADOR))
       return NextResponse.redirect(new URL('/prestaciones', req.url))

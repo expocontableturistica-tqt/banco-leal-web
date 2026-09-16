@@ -48,6 +48,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       return token
     },
     session({ session, token }) {
+      // Sin esto session.user.id queda vacío y las cajas por cajero no funcionan
+      session.user.id = token.sub as string
       session.user.role = token.role as UserRole
       session.user.entityId = token.entityId as number | null
       session.user.numeroCaja = token.numeroCaja as number | null
