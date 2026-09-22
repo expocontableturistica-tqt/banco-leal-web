@@ -8,7 +8,12 @@ interface Cuenta { id: number; empresaId: number | null; socioId: number | null;
 interface CajaInfo { estado: 'abierta' | 'cerrada'; saldoEfectivo: number; userId: string | null; numeroCaja: number | null }
 
 type Destinatario = 'socio' | 'empresa'
-type Metodo = 'extraccion' | 'efectivo' | 'cuenta' | 'qr'
+type Metodo = 'deposito' | 'extraccion' | 'efectivo' | 'cuenta' | 'qr'
+
+// Operaciones que mueven el efectivo de la caja: necesitan la caja abierta
+const CON_EFECTIVO: Metodo[] = ['deposito', 'extraccion', 'efectivo', 'qr']
+// Operaciones que usan una cuenta del titular
+const CON_CUENTA: Metodo[] = ['deposito', 'extraccion', 'cuenta']
 
 function fmt(n: number) {
   return n.toLocaleString('es-AR', { minimumFractionDigits: 2 })
@@ -24,7 +29,7 @@ export default function CajeroPage() {
   const [destinatario, setDestinatario] = useState<Destinatario>('socio')
   const [socioId, setSocioId] = useState('')
   const [empresaId, setEmpresaId] = useState('')
-  const [metodo, setMetodo] = useState<Metodo>('extraccion')
+  const [metodo, setMetodo] = useState<Metodo>('deposito')
   const [cuentaId, setCuentaId] = useState('')
   const [monto, setMonto] = useState('')
   const [concepto, setConcepto] = useState('')
@@ -65,7 +70,7 @@ export default function CajeroPage() {
   // Resetear metodo/cuenta al cambiar destinatario
   function cambiarDestinatario(d: Destinatario) {
     setDestinatario(d)
-    setMetodo('extraccion')
+    setMetodo('deposito')
     setCuentaId('')
     setSocioId('')
     setEmpresaId('')
@@ -89,13 +94,29 @@ export default function CajeroPage() {
       setEnviando(false)
       return
     }
-    if ((metodo === 'extraccion' || metodo === 'efectivo') && !cajaAbierta) {
-      setResultado({ ok: false, mensaje: 'La caja está cerrada. Abrila antes de entregar efectivo.' })
+    if (CON_EFECTIVO.includes(metodo) && !cajaAbierta) {
+      setResultado({ ok: false, mensaje: 'La caja está cerrada. Abrila antes de mover efectivo.' })
       setEnviando(false)
       return
     }
 
     try {
+      if (metodo === 'deposito') {
+        const res = await fetch('/api/caja', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accion: 'deposito', cuentaId: parseInt(cuentaId), monto: m, concepto }),
+        })
+        const data = await res.json()
+        if (res.ok) {
+          setCajaInfo(prev => prev ? { ...prev, saldoEfectivo: data.saldoEfectivo } : null)
+          setCuentas(prev => prev.map(c => c.id === parseInt(cuentaId) ? { ...c, saldo: data.saldoCuenta } : c))
+          setResultado({ ok: true, mensaje: `Depósito registrado: $${fmt(m)} acreditados en la cuenta. Saldo de la cuenta: $${fmt(data.saldoCuenta)} · Efectivo en caja: $${fmt(data.saldoEfectivo)}` })
+        } else {
+          setResultado({ ok: false, mensaje: data.error || 'Error al registrar el depósito' })
+        }
+      }
+
       if (metodo === 'extraccion') {
         const res = await fetch('/api/caja', {
           method: 'POST',
@@ -285,6 +306,7 @@ export default function CajeroPage() {
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">2. Operación</p>
             <div className="grid gap-2">
+              {opcionMetodo('deposito', <>🏧 Depósito: recibís efectivo y se acredita en su cuenta {!cajaAbierta && <span className="text-xs text-red-400 ml-1">(caja cerrada)</span>}</>)}
               {opcionMetodo('extraccion', <>💸 Extracción: efectivo que se descuenta de su cuenta {!cajaAbierta && <span className="text-xs text-red-400 ml-1">(caja cerrada)</span>}</>)}
               {opcionMetodo('efectivo', <>💵 Entrega de efectivo del banco <span className="text-xs text-gray-400">(no descuenta de ninguna cuenta)</span> {!cajaAbierta && <span className="text-xs text-red-400 ml-1">(caja cerrada)</span>}</>)}
               {opcionMetodo('cuenta', <>🏦 Acreditar en su cuenta bancaria</>, !titularElegido)}
@@ -293,10 +315,10 @@ export default function CajeroPage() {
           </div>
 
           {/* Select cuenta si la operación usa la cuenta */}
-          {(metodo === 'cuenta' || metodo === 'extraccion') && (
+          {CON_CUENTA.includes(metodo) && (
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
-                {metodo === 'extraccion' ? 'Cuenta de la que retira *' : 'Cuenta destino *'}
+                {metodo === 'extraccion' ? 'Cuenta de la que retira *' : metodo === 'deposito' ? 'Cuenta donde se deposita *' : 'Cuenta destino *'}
               </label>
               {!titularElegido ? (
                 <p className="text-xs text-gray-400">Elegí primero el {destinatario}.</p>
@@ -350,7 +372,7 @@ export default function CajeroPage() {
                   value={concepto}
                   onChange={e => setConcepto(e.target.value)}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder={metodo === 'extraccion' ? 'Ej: Retiro para cambio' : 'Ej: Entrega de capital inicial'}
+                  placeholder={metodo === 'deposito' ? 'Ej: Ventas del día' : metodo === 'extraccion' ? 'Ej: Retiro para cambio' : 'Ej: Entrega de capital inicial'}
                 />
               </div>
             </div>

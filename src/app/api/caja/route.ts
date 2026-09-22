@@ -24,6 +24,26 @@ async function getBoveda() {
   return rows[0] ?? { id: null, saldoEfectivo: 0, estado: 'cerrada' as const, userId: null, numeroCaja: null, fechaApertura: null, fechaCierre: null }
 }
 
+// Cuenta con el nombre de su titular, para los conceptos de los movimientos
+async function getCuentaConTitular(cuentaId: number) {
+  const [cuenta] = await db.select({
+    id: cuentas.id, cbu: cuentas.cbu, saldo: cuentas.saldo, estado: cuentas.estado,
+    razonSocial: empresas.razonSocial, nombre: socios.nombre, apellido: socios.apellido,
+  }).from(cuentas)
+    .leftJoin(empresas, eq(cuentas.empresaId, empresas.id))
+    .leftJoin(socios, eq(cuentas.socioId, socios.id))
+    .where(eq(cuentas.id, cuentaId)).limit(1)
+  return cuenta ?? null
+}
+
+function nombreTitular(cuenta: { razonSocial: string | null; apellido: string | null; nombre: string | null; cbu: string }) {
+  return cuenta.razonSocial ?? (cuenta.apellido ? `${cuenta.apellido}, ${cuenta.nombre}` : cuenta.cbu)
+}
+
+function lugarDeCaja(c: { userId: string | null; numeroCaja: number | null }) {
+  return c.userId ? `ventanilla ${c.numeroCaja ?? ''}`.trim() : 'bóveda'
+}
+
 // Caja con la que se atiende: la ventanilla propia; el admin sin ventanilla usa la bóveda.
 async function getCajaOperativa(role: string | undefined, userId: string) {
   const propia = await getCajaDeUsuario(userId)
@@ -207,6 +227,50 @@ export async function POST(req: Request) {
     return NextResponse.json({ saldoEfectivo: nuevoSaldo, estado: 'abierta' })
   }
 
+  // ── Depósito: el titular entrega efectivo y se le acredita en su cuenta ──
+  if (accion === 'deposito') {
+    const cuentaId = Number(body.cuentaId)
+    const m = Math.round(Number(monto) * 100) / 100
+    if (!cuentaId || !(m > 0))
+      return NextResponse.json({ error: 'Elegí la cuenta e ingresá un monto válido' }, { status: 400 })
+
+    const miCaja = await getCajaOperativa(role, userId)
+    if (!miCaja)
+      return NextResponse.json({ error: role === 'admin' ? 'Abrí la bóveda o una ventanilla para recibir el efectivo' : 'No tenés una ventanilla abierta' }, { status: 400 })
+
+    const cuenta = await getCuentaConTitular(cuentaId)
+    if (!cuenta) return NextResponse.json({ error: 'Cuenta no encontrada' }, { status: 404 })
+    if (cuenta.estado !== 'activa') return NextResponse.json({ error: 'La cuenta está inactiva' }, { status: 400 })
+
+    // Primero la cuenta: si algo fallara después, se devuelve la acreditación
+    const [cuentaAct] = await db.update(cuentas)
+      .set({ saldo: sql`round(${cuentas.saldo} + ${m}, 2)` })
+      .where(and(eq(cuentas.id, cuentaId), eq(cuentas.estado, 'activa')))
+      .returning()
+    if (!cuentaAct) return NextResponse.json({ error: 'La cuenta está inactiva' }, { status: 400 })
+    const [cajaAct] = await db.update(caja)
+      .set({ saldoEfectivo: sql`round(${caja.saldoEfectivo} + ${m}, 2)` })
+      .where(and(eq(caja.id, miCaja.id), eq(caja.estado, 'abierta')))
+      .returning()
+    if (!cajaAct) {
+      await db.update(cuentas).set({ saldo: sql`round(${cuentas.saldo} - ${m}, 2)` }).where(eq(cuentas.id, cuentaId))
+      return NextResponse.json({ error: 'La caja se cerró: volvé a abrirla para recibir el depósito' }, { status: 400 })
+    }
+
+    const titular = nombreTitular(cuenta)
+    const lugar = lugarDeCaja(miCaja)
+    await db.insert(movimientosCuenta).values({
+      cuentaId,
+      tipo: 'credito',
+      monto: m,
+      concepto: `Depósito en efectivo (${lugar})${concepto ? ` — ${concepto}` : ''}`,
+      saldoPosterior: cuentaAct.saldo,
+    })
+    await registrarMovimiento(miCaja.id, 'ingreso', m, `Depósito en cuenta — ${titular} (CBU …${cuenta.cbu.slice(-4)})`, cajaAct.saldoEfectivo)
+
+    return NextResponse.json({ ok: true, saldoCuenta: cuentaAct.saldo, saldoEfectivo: cajaAct.saldoEfectivo })
+  }
+
   // ── Extracción: el titular retira efectivo y se descuenta de su cuenta ────
   if (accion === 'extraccion') {
     const cuentaId = Number(body.cuentaId)
@@ -218,13 +282,7 @@ export async function POST(req: Request) {
     if (!miCaja)
       return NextResponse.json({ error: role === 'admin' ? 'Abrí la bóveda o una ventanilla para entregar efectivo' : 'No tenés una ventanilla abierta' }, { status: 400 })
 
-    const [cuenta] = await db.select({
-      id: cuentas.id, cbu: cuentas.cbu, saldo: cuentas.saldo, estado: cuentas.estado,
-      razonSocial: empresas.razonSocial, nombre: socios.nombre, apellido: socios.apellido,
-    }).from(cuentas)
-      .leftJoin(empresas, eq(cuentas.empresaId, empresas.id))
-      .leftJoin(socios, eq(cuentas.socioId, socios.id))
-      .where(eq(cuentas.id, cuentaId)).limit(1)
+    const cuenta = await getCuentaConTitular(cuentaId)
     if (!cuenta) return NextResponse.json({ error: 'Cuenta no encontrada' }, { status: 404 })
     if (cuenta.estado !== 'activa') return NextResponse.json({ error: 'La cuenta está inactiva' }, { status: 400 })
     if (cuenta.saldo + 0.001 < m)
@@ -248,8 +306,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'No hay efectivo suficiente en la caja' }, { status: 400 })
     }
 
-    const titular = cuenta.razonSocial ?? (cuenta.apellido ? `${cuenta.apellido}, ${cuenta.nombre}` : cuenta.cbu)
-    const lugar = miCaja.userId ? `ventanilla ${miCaja.numeroCaja ?? ''}`.trim() : 'bóveda'
+    const titular = nombreTitular(cuenta)
+    const lugar = lugarDeCaja(miCaja)
     await db.insert(movimientosCuenta).values({
       cuentaId,
       tipo: 'debito',
