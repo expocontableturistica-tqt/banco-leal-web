@@ -20,6 +20,17 @@ interface ResumenCierre {
     compras: { montoARS: number; cantidad: number }
   }
   prestaciones: { tipo: string; cantidad: number }[]
+  arqueo: {
+    id: number
+    esBoveda: boolean
+    numeroCaja: number | null
+    cajero: string | null
+    estado: 'abierta' | 'cerrada'
+    saldoInicial: number
+    ingresos: { monto: number; cantidad: number }
+    egresos: { monto: number; cantidad: number }
+    saldoActual: number
+  }[]
   cajaActual: {
     bovedaAbierta: boolean
     bovedaSaldo: number
@@ -107,6 +118,19 @@ export default function CierrePage() {
   const netoCuentas = data.cuentas.creditos.monto - data.cuentas.debitos.monto
   const netoCambio  = data.cambio.ventas.montoARS - data.cambio.compras.montoARS
 
+  const arqueo = data.arqueo ?? []
+  const nombreCaja = (a: ResumenCierre['arqueo'][number]) =>
+    a.esBoveda ? 'Bóveda' : `Ventanilla ${a.numeroCaja ?? ''}${a.cajero ? ` — ${a.cajero}` : ''}`
+  // Una ventanilla cerrada ya entregó su efectivo a la bóveda: sumarla de nuevo
+  // duplicaría la plata. La bóveda, aunque esté cerrada, sigue guardándola.
+  const cuentaParaElTotal = (a: ResumenCierre['arqueo'][number]) => a.esBoveda || a.estado === 'abierta'
+  const totalArqueo = arqueo.reduce((t, a) => ({
+    saldoInicial: t.saldoInicial + a.saldoInicial,
+    ingresos: t.ingresos + a.ingresos.monto,
+    egresos: t.egresos + a.egresos.monto,
+    enMano: t.enMano + (cuentaParaElTotal(a) ? a.saldoActual : 0),
+  }), { saldoInicial: 0, ingresos: 0, egresos: 0, enMano: 0 })
+
   const cierreRows: { concepto: string; cantidad: number | string; monto: number | string }[] = [
     { concepto: 'Cuentas · Créditos (ingresos)', cantidad: data.cuentas.creditos.cantidad, monto: data.cuentas.creditos.monto },
     { concepto: 'Cuentas · Débitos (egresos)', cantidad: data.cuentas.debitos.cantidad, monto: data.cuentas.debitos.monto },
@@ -119,6 +143,15 @@ export default function CierrePage() {
     { concepto: 'Cambio · Compras de divisas (ARS)', cantidad: data.cambio.compras.cantidad, monto: data.cambio.compras.montoARS },
     { concepto: 'Cambio · Neto ARS', cantidad: '', monto: netoCambio },
     ...data.prestaciones.map(p => ({ concepto: `Prestación · ${TIPO_PREST[p.tipo] ?? p.tipo}`, cantidad: p.cantidad, monto: '' as string })),
+    ...(data.arqueo ?? []).flatMap(a => {
+      const nombre = a.esBoveda ? 'Bóveda' : `Ventanilla ${a.numeroCaja ?? ''}${a.cajero ? ` — ${a.cajero}` : ''}`
+      return [
+        { concepto: `${nombre} · Saldo al abrir`, cantidad: '', monto: a.saldoInicial },
+        { concepto: `${nombre} · Entradas`, cantidad: a.ingresos.cantidad, monto: a.ingresos.monto },
+        { concepto: `${nombre} · Salidas`, cantidad: a.egresos.cantidad, monto: a.egresos.monto },
+        { concepto: `${nombre} · Efectivo al cierre`, cantidad: '', monto: a.saldoActual },
+      ]
+    }),
   ]
 
   return (
@@ -219,6 +252,67 @@ export default function CierrePage() {
             </span>
           </div>
         </div>
+      </div>
+
+      {/* Arqueo por caja */}
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-6">
+        <div className="px-5 py-3 border-b border-gray-100">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Arqueo de caja del día</p>
+          <p className="text-xs text-gray-400 mt-0.5">Saldo al abrir + lo que entró − lo que salió = efectivo que tiene que haber</p>
+        </div>
+        {arqueo.length === 0 ? (
+          <p className="px-5 py-6 text-sm text-gray-400">Todavía no hubo movimientos de efectivo hoy.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+                <tr>
+                  <th className="px-4 py-2 text-left">Caja</th>
+                  <th className="px-4 py-2 text-right">Saldo al abrir</th>
+                  <th className="px-4 py-2 text-right">Entradas</th>
+                  <th className="px-4 py-2 text-right">Salidas</th>
+                  <th className="px-4 py-2 text-right">Efectivo al cierre</th>
+                  <th className="px-4 py-2 text-center">Estado</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {arqueo.map(a => (
+                  <tr key={a.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-2.5 font-medium text-gray-800">{nombreCaja(a)}</td>
+                    <td className="px-4 py-2.5 text-right font-mono text-gray-600">${fmt(a.saldoInicial)}</td>
+                    <td className="px-4 py-2.5 text-right font-mono text-green-600">
+                      +${fmt(a.ingresos.monto)}
+                      {a.ingresos.cantidad > 0 && <span className="ml-1 text-xs text-gray-400">({a.ingresos.cantidad})</span>}
+                    </td>
+                    <td className="px-4 py-2.5 text-right font-mono text-red-500">
+                      −${fmt(a.egresos.monto)}
+                      {a.egresos.cantidad > 0 && <span className="ml-1 text-xs text-gray-400">({a.egresos.cantidad})</span>}
+                    </td>
+                    <td className={`px-4 py-2.5 text-right font-mono font-semibold ${cuentaParaElTotal(a) ? 'text-gray-900' : 'text-gray-400'}`}>
+                      ${fmt(a.saldoActual)}
+                      {a.estado === 'cerrada' && !a.esBoveda && (
+                        <span className="ml-1 text-xs font-normal text-gray-400">→ bóveda</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5 text-center">
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                        a.estado === 'abierta' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'
+                      }`}>{a.estado}</span>
+                    </td>
+                  </tr>
+                ))}
+                <tr className="bg-gray-50 font-semibold">
+                  <td className="px-4 py-2.5 text-gray-700">Total</td>
+                  <td className="px-4 py-2.5 text-right font-mono">${fmt(totalArqueo.saldoInicial)}</td>
+                  <td className="px-4 py-2.5 text-right font-mono text-green-700">+${fmt(totalArqueo.ingresos)}</td>
+                  <td className="px-4 py-2.5 text-right font-mono text-red-600">−${fmt(totalArqueo.egresos)}</td>
+                  <td className="px-4 py-2.5 text-right font-mono">${fmt(totalArqueo.enMano)}</td>
+                  <td className="px-4 py-2.5 text-center text-xs font-normal text-gray-400">en el banco</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Estado de caja + Acciones */}

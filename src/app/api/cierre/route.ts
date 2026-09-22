@@ -3,15 +3,11 @@ import { auth } from '@/auth'
 import { db } from '@/lib/db'
 import {
   movimientosCuenta, movimientosCaja, pagosServicios,
-  operacionesCambio, prestaciones, caja, config,
+  operacionesCambio, prestaciones, caja, config, users,
 } from '@/lib/schema'
-import { and, desc, eq, gte, isNull, sql } from 'drizzle-orm'
+import { and, desc, eq, gte, inArray, isNull, sql } from 'drizzle-orm'
 
-function hoyISO() {
-  const d = new Date()
-  d.setHours(0, 0, 0, 0)
-  return d.toISOString()
-}
+import { comienzoDelDia } from '@/lib/fechas'
 
 // ── GET — resumen del día ─────────────────────────────────────────────────────
 export async function GET() {
@@ -19,11 +15,12 @@ export async function GET() {
   if (!session || session.user?.role !== 'admin')
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const desde = hoyISO()
+  const desde = comienzoDelDia()
 
   const [
     movCuenta,
     movCajaRows,
+    arqueoRows,
     serviciosRows,
     cambioRows,
     prestRows,
@@ -50,6 +47,17 @@ export async function GET() {
     .from(movimientosCaja)
     .where(gte(movimientosCaja.createdAt, desde))
     .groupBy(movimientosCaja.tipo),
+
+    // Movimientos de hoy separados por caja, para el arqueo
+    db.select({
+      cajaId: movimientosCaja.cajaId,
+      tipo: movimientosCaja.tipo,
+      total: sql<number>`SUM(monto)`,
+      cantidad: sql<number>`COUNT(*)`,
+    })
+    .from(movimientosCaja)
+    .where(gte(movimientosCaja.createdAt, desde))
+    .groupBy(movimientosCaja.cajaId, movimientosCaja.tipo),
 
     // Servicios hoy
     db.select({
@@ -92,6 +100,41 @@ export async function GET() {
     db.select().from(config).where(eq(config.key, 'ultimo_cierre')).limit(1),
   ])
 
+  // ── Arqueo: una fila por caja que trabajó hoy (más las que están abiertas) ──
+  const idsConMovimientos = [...new Set(arqueoRows.map(r => r.cajaId).filter((id): id is number => !!id))]
+  const cajasDelDia = idsConMovimientos.length
+    ? await db.select({
+        id: caja.id, userId: caja.userId, numeroCaja: caja.numeroCaja,
+        saldoEfectivo: caja.saldoEfectivo, estado: caja.estado,
+        fechaApertura: caja.fechaApertura, fechaCierre: caja.fechaCierre,
+        cajero: users.name,
+      }).from(caja).leftJoin(users, eq(caja.userId, users.id)).where(inArray(caja.id, idsConMovimientos))
+    : []
+
+  const ENTRADAS = ['ingreso', 'transferencia_entrada']
+  const SALIDAS  = ['egreso', 'transferencia_salida']
+  const arqueo = cajasDelDia.map(c => {
+    const suyos = arqueoRows.filter(r => r.cajaId === c.id)
+    const sumar = (tipos: string[]) => suyos.filter(r => tipos.includes(r.tipo)).reduce((a, r) => ({
+      monto: a.monto + Number(r.total ?? 0),
+      cantidad: a.cantidad + Number(r.cantidad ?? 0),
+    }), { monto: 0, cantidad: 0 })
+    const ingresos = sumar(ENTRADAS)
+    const egresos  = sumar(SALIDAS)
+    return {
+      id: c.id,
+      esBoveda: c.userId === null,
+      numeroCaja: c.numeroCaja,
+      cajero: c.cajero ?? null,
+      estado: c.estado,
+      // Saldo con el que empezó el día: lo que hay ahora menos lo que se movió hoy
+      saldoInicial: Math.round((c.saldoEfectivo - ingresos.monto + egresos.monto) * 100) / 100,
+      ingresos,
+      egresos,
+      saldoActual: c.saldoEfectivo,
+    }
+  }).sort((a, b) => Number(b.esBoveda) - Number(a.esBoveda) || (a.numeroCaja ?? 0) - (b.numeroCaja ?? 0))
+
   const creditos   = movCuenta.find(m => m.tipo === 'credito')
   const debitos    = movCuenta.find(m => m.tipo === 'debito')
   const ingresosCaja = movCajaRows.find(m => m.tipo === 'ingreso')
@@ -119,6 +162,7 @@ export async function GET() {
       compras: { montoARS: Number(comprasCambio?.totalARS ?? 0), cantidad: Number(comprasCambio?.cantidad ?? 0) },
     },
     prestaciones: prestRows.map(p => ({ tipo: p.tipo, cantidad: Number(p.cantidad) })),
+    arqueo,
     cajaActual: {
       bovedaAbierta: bovedaRows.length > 0,
       bovedaSaldo:   bovedaRows[0]?.saldoEfectivo ?? 0,

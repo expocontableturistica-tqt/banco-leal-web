@@ -3,15 +3,14 @@ import { auth } from '@/auth'
 import { db } from '@/lib/db'
 import { socios, empresas, cuentas, caja, movimientosCaja, movimientosCuenta, prestaciones, transacciones } from '@/lib/schema'
 import { and, count, desc, eq, gte, isNull, sql, sum } from 'drizzle-orm'
+import { comienzoDelDia } from '@/lib/fechas'
 
 export async function GET() {
   const session = await auth()
   if (!session || !['admin', 'cajero'].includes(session.user?.role ?? ''))
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const hoy = new Date()
-  hoy.setHours(0, 0, 0, 0)
-  const hoyISO = hoy.toISOString()
+  const hoyISO = comienzoDelDia()
 
   const [
     [totalSocios],

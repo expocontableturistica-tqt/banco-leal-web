@@ -8,6 +8,7 @@ import {
 } from '@/lib/schema'
 import { and, desc, eq, gte, like, lte } from 'drizzle-orm'
 import { leerEntrega } from '@/lib/prestamos'
+import { limiteDelDia } from '@/lib/fechas'
 
 // ── Plan de cuentas simplificado ─────────────────────────────────────────────
 export const PLAN: Record<string, { nombre: string; tipo: 'activo' | 'pasivo' | 'ingreso' | 'egreso' }> = {
@@ -42,8 +43,10 @@ export async function GET(req: Request) {
   const desde = searchParams.get('desde')
   const hasta = searchParams.get('hasta')
 
-  const desdeISO = desde ? `${desde}T00:00:00` : undefined
-  const hastaISO = hasta ? `${hasta}T23:59:59` : undefined
+  // Las fechas se eligen en hora de Argentina y la base guarda UTC con espacio;
+  // sin convertirlas se perdían los movimientos del primer día del rango.
+  const desdeISO = desde ? limiteDelDia(desde) : undefined
+  const hastaISO = hasta ? limiteDelDia(hasta, true) : undefined
 
   const makeFilter = (col: Parameters<typeof gte>[0]) => {
     const f = [

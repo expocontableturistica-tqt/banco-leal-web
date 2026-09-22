@@ -3,6 +3,7 @@ import { auth } from '@/auth'
 import { db } from '@/lib/db'
 import { pagosServicios, socios, caja, movimientosCaja } from '@/lib/schema'
 import { and, desc, eq, isNull, gte } from 'drizzle-orm'
+import { comienzoDelDia } from '@/lib/fechas'
 
 async function getCajaAbierta(userId: string) {
   // Primero la ventanilla del cajero, si no la bóveda
@@ -25,8 +26,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const hoy = searchParams.get('hoy') === '1'
 
-  const hoyISO = new Date()
-  hoyISO.setHours(0, 0, 0, 0)
+  const desdeHoy = comienzoDelDia()
 
   const [pagos, sociosRows] = await Promise.all([
     db.select({
@@ -41,7 +41,7 @@ export async function GET(req: Request) {
     })
     .from(pagosServicios)
     .leftJoin(socios, eq(pagosServicios.socioId, socios.id))
-    .where(hoy ? gte(pagosServicios.createdAt, hoyISO.toISOString()) : undefined)
+    .where(hoy ? gte(pagosServicios.createdAt, desdeHoy) : undefined)
     .orderBy(desc(pagosServicios.id))
     .limit(100),
     db.select({ id: socios.id, nombre: socios.nombre, apellido: socios.apellido, numeroSocio: socios.numeroSocio })
