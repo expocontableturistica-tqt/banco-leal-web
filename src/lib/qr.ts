@@ -50,16 +50,23 @@ export async function qrCargaMediaPago(monto: number) {
   return { tid, payload, dataUrl: await qrDesdePayload(payload) }
 }
 
-/** Préstamo personal: MediaPago lo muestra como préstamo y lo acredita en la billetera. */
-export async function qrPrestamoMediaPago(monto: number, cuotas: number) {
-  const tipo = 'banco_prestamo'
+/**
+ * Prestación bancaria (tarjeta, seguro, límite, bono, préstamo). Cada tipo lleva
+ * sus propios datos; MediaPago los lee tal cual (ver src/lib/prestaciones.ts).
+ */
+export async function qrPrestacionMediaPago(tipo: string, datos: Record<string, unknown>) {
   const tid = randomBytes(8).toString('hex')
   const ts = Math.floor(Date.now() / 1000)
   const payload = {
-    v: 2, tipo, monto, cuotas, tasaMensual: 0, tid, ts,
+    v: 2, tipo, ...datos, tid, ts,
     sig: firmaMediaPago(`prestacion|${tipo}|${tid}|${ts}`),
   }
   return { tid, payload, dataUrl: await qrDesdePayload(payload) }
+}
+
+/** Préstamo personal: MediaPago lo muestra como préstamo y lo acredita en la billetera. */
+export async function qrPrestamoMediaPago(monto: number, cuotas: number) {
+  return qrPrestacionMediaPago('banco_prestamo', { monto, cuotas, tasaMensual: 0 })
 }
 
 // ── Códigos de transferencia BF-XXXX ────────────────────────────────────────

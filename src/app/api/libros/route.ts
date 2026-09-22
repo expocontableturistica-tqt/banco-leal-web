@@ -215,12 +215,16 @@ export async function GET(req: Request) {
 
   // ── Retiros por QR / MediaPago ───────────────────────────────────────────
   for (const t of transaccionesRows) {
+    // Un bono es un gasto del banco; un retiro por QR es dinero que sale de la caja
+    const esBono = /^Bono/i.test(t.descripcion ?? '')
     asientos.push({
       id: `TX-${t.id}`,
       fecha: t.createdAt,
-      concepto: `Retiro QR MediaPago${t.socioId ? ` — socio #${t.socioId}` : ''}`,
-      debe:  { codigo: '9.9.9', cuenta: 'Cuenta general / varios', monto: t.monto },
-      haber: { codigo: '1.1.1', cuenta: 'Caja y Efectivo',         monto: t.monto },
+      concepto: `${t.descripcion || 'Retiro QR MediaPago'}${t.socioId ? ` — socio #${t.socioId}` : ''}`,
+      debe:  esBono
+        ? { codigo: '5.1.2', cuenta: 'Otros egresos',            monto: t.monto }
+        : { codigo: '9.9.9', cuenta: 'Cuenta general / varios',  monto: t.monto },
+      haber: { codigo: '1.1.1', cuenta: 'Caja y Efectivo',       monto: t.monto },
       origen: 'auto',
     })
   }
